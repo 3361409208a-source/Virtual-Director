@@ -29,6 +29,7 @@ var _cam_seg_idx: int    = 0
 var _seg_start_t: float  = 0.0
 var _orbit_angle: float  = 0.0
 var _asset_manifest: Dictionary = {}  # actor_id → {path, target_size} | null
+var _attach_map: Dictionary = {}      # child_id → parent_id (for attached actors)
 
 func _ready():
 	print("DirectorEngine initialized.")
@@ -282,6 +283,28 @@ func _spawn_actors(data: Dictionary) -> void:
 			node.rotation_degrees = rot
 			add_child(node)
 			print("Spawned: ", id, " (", type, ")")
+
+	# ── Attachment pass: reparent attached actors to their parent ──────────────
+	# Done after all actors are spawned so parent nodes exist.
+	for actor_data in actors:
+		var child_id  = str(actor_data.get("id", ""))
+		var parent_id = str(actor_data.get("attach_to", ""))
+		if parent_id == "" or not has_node(NodePath(child_id)) or not has_node(NodePath(parent_id)):
+			continue
+
+		var child_node  = get_node(NodePath(child_id))
+		var parent_node = get_node(NodePath(parent_id))
+
+		# Apply local offset
+		var off_d = actor_data.get("local_offset", {"x":0,"y":0,"z":0})
+		var offset = Vector3(float(off_d.get("x",0)), float(off_d.get("y",0)), float(off_d.get("z",0)))
+
+		# Reparent: move child under parent node
+		remove_child(child_node)
+		parent_node.add_child(child_node)
+		child_node.position         = offset
+		child_node.rotation_degrees = Vector3.ZERO
+		print("Attached '", child_id, "' -> '", parent_id, "' at offset ", offset)
 
 func _create_actor_visual(id: String, type: String) -> Node3D:
 	# Try manifest first
@@ -636,15 +659,30 @@ func _build_animation(data: Dictionary) -> void:
 	# Camera is handled by _process() runtime tracker — not keyframed here.
 
 	var actor_tracks = data.get("actor_tracks", {})
+	# Build attach map for path resolution
+	for actor_data in data.get("actors", []):
+		var cid = str(actor_data.get("id", ""))
+		var pid = str(actor_data.get("attach_to", ""))
+		if pid != "":
+			_attach_map[cid] = pid
+
 	for actor_id in actor_tracks:
-		if not has_node(NodePath(actor_id)):
-			print("Warning: no node for actor track: ", actor_id)
+		# Resolve node path — attached actors live under their parent node
+		var node_path: String
+		if _attach_map.has(actor_id):
+			var parent_id = _attach_map[actor_id]
+			node_path = parent_id + "/" + actor_id
+		else:
+			node_path = actor_id
+
+		if not has_node(NodePath(node_path)):
+			print("Warning: no node for actor track: ", node_path)
 			continue
-		var node = get_node(NodePath(actor_id))
+		var node = get_node(NodePath(node_path))
 		if node is RigidBody3D:
 			print("Skipping keyframes for physics body: ", actor_id)
 			continue  # physics engine controls this actor
-		_build_node_track(anim, actor_id, actor_tracks[actor_id], false)
+		_build_node_track(anim, node_path, actor_tracks[actor_id], false)
 
 	var library: AnimationLibrary
 	if animation_player.has_animation_library(""):

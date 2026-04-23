@@ -74,12 +74,26 @@ actor_tool: dict = {
                             "type":             {"type": "string", "enum": ["humanoid", "car", "box", "plane"]},
                             "initial_position": VEC3,
                             "initial_rotation": VEC3,
+                            "attach_to":  {
+                                "type": "string",
+                                "description": (
+                                    "若该演员需要附着在另一个演员身上（如人骑在飞机/车上），"
+                                    "填写被附着的演员ID。附着后，该演员的位置/旋转会完全跟随父演员，"
+                                    "其 actor_tracks 应使用相对于父演员的局部坐标。"
+                                    "不附着则省略此字段。"
+                                ),
+                            },
+                            "local_offset": {
+                                **VEC3,
+                                "description": "attach_to 模式下，该演员相对于父演员中心的初始偏移量，如 {x:0,y:1,z:0} 表示在父演员上方1米处。",
+                            },
                         },
                         "required": ["id", "type", "initial_position"],
                     },
                 },
                 "actor_tracks": {
                     "type": "object",
+                    "description": "每个演员ID对应的关键帧列表。attach_to的演员的坐标为相对父演员的局部坐标（不附着的演员用世界坐标）。",
                     "additionalProperties": {
                         "type": "array",
                         "items": ACTOR_KEYFRAME,
@@ -90,6 +104,7 @@ actor_tool: dict = {
         },
     },
 }
+
 
 # ── Camera Tool ─────────────────────────────────────────────────────────────────
 # Uses runtime-tracking modes so the camera always knows where actors actually are.
