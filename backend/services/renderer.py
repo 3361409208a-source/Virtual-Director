@@ -6,8 +6,9 @@ from backend.config import GODOT_EXECUTABLE, GODOT_DIR, GODOT_SCENE, FRONTEND_PU
 def do_godot(avi_path: str) -> None:
     """Launch Godot in --write-movie mode to render the scene to an AVI file."""
     os.makedirs(FRONTEND_PUBLIC_DIR, exist_ok=True)
-    command = [GODOT_EXECUTABLE, "--display-driver", "headless", "--write-movie", avi_path, GODOT_SCENE]
+    command = [GODOT_EXECUTABLE, "--write-movie", avi_path, GODOT_SCENE]
     result = subprocess.run(command, cwd=GODOT_DIR, capture_output=True, text=True)
+
 
 
     if result.returncode != 0:
