@@ -1,4 +1,8 @@
 import os
+from dotenv import load_dotenv
+
+load_dotenv() # Load variables from .env
+
 
 ROOT_DIR            = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BACKEND_DIR         = os.path.join(ROOT_DIR, "backend")

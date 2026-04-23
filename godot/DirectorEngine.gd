@@ -687,5 +687,6 @@ func _build_node_track(anim: Animation, node_name: String, track_data: Array, is
 	anim.track_set_interpolation_type(rot_idx, Animation.INTERPOLATION_CUBIC)
 
 func _on_animation_finished(_anim_name: String):
-	print("Cut! Animation finished.")
+	print("Cut! Animation finished. Rendering complete.")
 	get_tree().quit()
+

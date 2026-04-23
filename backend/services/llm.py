@@ -27,21 +27,57 @@ def get_model() -> str:
     return _model_var.get()
 
 
-def _extract_json(s: str) -> dict:
-    """Robustly extract JSON from a string that might contain extra text or markdown blocks."""
+def _repair_json(s: str) -> str:
+    """Attempt to fix common LLM JSON errors like missing or extra closing brackets."""
     s = s.strip()
+    if not s:
+        return s
+    
+    # 1. Basic balancing: count { vs } and [ vs ]
+    # This is a naive approach but often works for trailing garbage or missing closings
+    stack = []
+    fixed_s = ""
+    for i, char in enumerate(s):
+        if char == '{' or char == '[':
+            stack.append('}' if char == '{' else ']')
+        elif char == '}' or char == ']':
+            if stack and stack[-1] == char:
+                stack.pop()
+            else:
+                # Mismatched or extra closing, skip it or handle it
+                continue
+        fixed_s += char
+    
+    # Add missing closings
+    while stack:
+        fixed_s += stack.pop()
+    
+    return fixed_s
+
+
+def _extract_json(s: str) -> dict:
+    """Robustly extract and repair JSON from a string."""
+    s = s.strip()
+    
     # 1. Try direct parse
     try:
         return json.loads(s)
     except json.JSONDecodeError as e:
-        # If the error is 'Extra data', it means there's a valid JSON at the beginning
+        # If the error is 'Extra data', try to truncate
         if "Extra data" in e.msg:
             try:
                 return json.loads(s[:e.pos])
             except Exception:
                 pass
-        
-        # 2. Try to find the first '{' and last '}'
+
+        # 2. Try to repair the string (handle mismatched brackets)
+        try:
+            repaired = _repair_json(s)
+            return json.loads(repaired)
+        except Exception:
+            pass
+
+        # 3. Try to find the first '{' and last '}'
         start = s.find('{')
         end = s.rfind('}')
         if start != -1 and end != -1 and end > start:
@@ -49,15 +85,21 @@ def _extract_json(s: str) -> dict:
             try:
                 return json.loads(candidate)
             except json.JSONDecodeError as e2:
-                # If still 'Extra data', try the pos trick again on the candidate
                 if "Extra data" in e2.msg:
                     try:
                         return json.loads(candidate[:e2.pos])
                     except Exception:
                         pass
-        
+                
+                # Try repairing the candidate
+                try:
+                    return json.loads(_repair_json(candidate))
+                except Exception:
+                    pass
+
         # Re-raise the original error if we couldn't recover
         raise e
+
 
 
 
