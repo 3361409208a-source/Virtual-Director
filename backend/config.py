@@ -14,7 +14,8 @@ PROJECTS_DIR          = os.path.join(ROOT_DIR, "projects")
 GODOT_EXECUTABLE    = r"D:\Program Files\Godot_v4.6.2-stable_win64.exe"
 GODOT_SCENE         = "main.tscn"
 
-DEEPSEEK_API_KEY    = "sk-3c38bbc095ee40d0b51298adaf1c66e9"
+DEEPSEEK_API_KEY    = os.environ.get("DEEPSEEK_API_KEY", "")
+
 DEEPSEEK_BASE_URL   = "https://api.deepseek.com"
 DEEPSEEK_MODEL      = "deepseek-chat"
 
