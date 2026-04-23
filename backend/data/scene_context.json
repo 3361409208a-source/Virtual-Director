@@ -1,0 +1,35 @@
+{
+  "scene_name": "Dynamic_Stage",
+  "description": "动态场景，Y=0为地面，可通过JSON指令动态生成演员并驱动关键帧动画。",
+  "available_actor_types": [
+    {
+      "type": "humanoid",
+      "description": "人形角色（方块人：身体+头+腿），不同人物会自动使用不同颜色区分"
+    },
+    {
+      "type": "car",
+      "description": "汽车（橙红色车身+车顶+4个轮子），适合高速运动场景"
+    },
+    {
+      "type": "box",
+      "description": "通用方块道具，可作为障碍物、地标等"
+    }
+  ],
+  "cameras": [
+    {
+      "id": "Camera3D",
+      "initial_position": {"x": 0.0, "y": 1.0, "z": 5.0},
+      "initial_rotation": {"x": 0.0, "y": 0.0, "z": 0.0},
+      "fov": 75.0
+    }
+  ],
+  "scene_setup_capabilities": {
+    "sky": "通过top_color/horizon_color设置天空颜色（白天/黄昏/夜晚等）",
+    "sun": "方向光，euler_degrees控制角度（x=-60为午后斜照），color/energy控制色温强度",
+    "ambient_energy": "环境光强度0.0~1.0",
+    "fog": "可选雾效，density控制浓度",
+    "ground": "地面平面，color可设草地/沥青/沙地等，size控制范围",
+    "props": "静态道具，shape支持box/sphere，有position/size/color"
+  },
+  "director_guidelines": "每次渲染必须填写scene_setup搭建完整场景（天空/光照/地面/道具）；在actors中定义演员；actor_tracks驱动运动关键帧；碰撞撞飞通过关键帧模拟（被撞瞬间position+rotation剧变）；相机配合给出冲击力运镜。"
+}

@@ -1,0 +1,26 @@
+from fastapi import APIRouter
+from fastapi.responses import FileResponse, JSONResponse
+from backend.services.project_store import list_projects, get_project, get_project_video_path
+
+router = APIRouter()
+
+@router.get("/projects")
+def get_projects():
+    """List all saved projects (newest first)."""
+    return {"projects": list_projects()}
+
+@router.get("/projects/{pid}")
+def get_project_detail(pid: str):
+    """Get full project: meta + chat + sequence."""
+    data = get_project(pid)
+    if not data:
+        return JSONResponse(status_code=404, content={"error": "Project not found"})
+    return data
+
+@router.get("/projects/{pid}/video")
+def get_project_video(pid: str):
+    """Stream the MP4 video for a project."""
+    path = get_project_video_path(pid)
+    if not path:
+        return JSONResponse(status_code=404, content={"error": "Video not found"})
+    return FileResponse(path, media_type="video/mp4", filename="video.mp4")

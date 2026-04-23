@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+venv/
+ENV/
+backend/data/*.json
+!backend/data/scene_context.json
+
+# Node.js
+node_modules/
+dist/
+frontend/dist/
+frontend/node_modules/
+.eslintcache
+
+# Godot
+.godot/
+*.tmp
+*.log
+godot/assets/downloaded/*
+!godot/assets/downloaded/.gitkeep
+
+# Project specific
+projects/
+frontend/public/output.*
+frontend/public/sequence.json
+godot/director_sequence.json
+
+# OS
+.DS_Store
+Thumbs.db
