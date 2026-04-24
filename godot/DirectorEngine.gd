@@ -3,28 +3,9 @@ extends Node3D
 @onready var animation_player = $AnimationPlayer
 @onready var camera = $Camera3D
 
-const HUMANOID_COLORS = [
-	Color(0.27, 0.52, 0.90),  # blue
-	Color(0.92, 0.26, 0.21),  # red
-	Color(0.18, 0.72, 0.34),  # green
-	Color(0.97, 0.76, 0.10),  # yellow
-	Color(0.65, 0.20, 0.85),  # purple
-	Color(0.10, 0.78, 0.88),  # cyan
-]
-const CAR_COLORS = [
-	Color(0.90, 0.20, 0.10),
-	Color(0.10, 0.30, 0.85),
-	Color(0.08, 0.55, 0.20),
-	Color(0.95, 0.85, 0.10),
-	Color(0.15, 0.15, 0.15),
-	Color(0.90, 0.90, 0.90),
-]
-
-var _humanoid_idx := 0
-var _car_idx       := 0
-
 # Runtime camera tracking state
 var _cam_track: Array    = []
+
 var _cam_seg_idx: int    = 0
 var _seg_start_t: float  = 0.0
 var _orbit_angle: float  = 0.0
@@ -267,22 +248,25 @@ func _spawn_actors(data: Dictionary) -> void:
 
 		var phys = phys_map.get(id, {})
 		var body_type = str(phys.get("body_type", "none"))
+		
+		# Always create visual from manifest/composite first
+		var visual: Node3D = _create_actor_visual(id, type)
 
 		if body_type == "rigid":
-			var node = _create_rigid_actor(type, id, pos, rot, phys)
+			var node = _create_rigid_actor(id, pos, rot, phys, visual)
 			add_child(node)
-			print("Spawned RIGID: ", id, " (", type, ")")
+			print("Spawned RIGID: ", id)
 		elif body_type == "static":
-			var node = _create_static_actor(type, id, pos, rot, phys)
+			var node = _create_static_actor(id, pos, rot, phys, visual)
 			add_child(node)
-			print("Spawned STATIC: ", id, " (", type, ")")
+			print("Spawned STATIC: ", id)
 		else:
-			var node: Node3D = _create_actor_visual(id, type)
-			node.name             = id
-			node.position         = pos
-			node.rotation_degrees = rot
-			add_child(node)
-			print("Spawned: ", id, " (", type, ")")
+			visual.name             = id
+			visual.position         = pos
+			visual.rotation_degrees = rot
+			add_child(visual)
+			print("Spawned: ", id)
+
 
 	# ── Attachment pass: reparent attached actors to their parent ──────────────
 	# Done after all actors are spawned so parent nodes exist.
@@ -324,13 +308,10 @@ func _create_actor_visual(id: String, type: String) -> Node3D:
 				print("Loaded GLB for ", id, ": ", res_path)
 				return glb
 			else:
-				print("GLB load failed for ", id, ", falling back to procedural")
-	# Procedural fallback
-	match type:
-		"humanoid": return _create_humanoid()
-		"car":      return _create_car()
-		"plane":    return _create_plane()
-		_:          return _create_box(Vector3(1,1,1), Color.GRAY)
+				print("GLB load failed for ", id, ", falling back to box")
+	# Ultimate fallback: simple box if manifest failed
+	return _create_box(Vector3(1,1,1), Color.GRAY)
+
 
 func _build_composite_actor(parts: Array) -> Node3D:
 	var root = Node3D.new()
@@ -435,33 +416,36 @@ func _collect_aabb(node: Node3D, xform: Transform3D, state: Array) -> void:
 
 # ── Physics actor helpers ─────────────────────────────────────────────────────
 
-func _make_collision_shape(type: String, cshape: String) -> CollisionShape3D:
+func _make_collision_shape(visual: Node3D, cshape: String) -> CollisionShape3D:
 	var cs    = CollisionShape3D.new()
 	var shape: Shape3D
+	
+	# Try to find a good size from the visual's AABB
+	var state = [AABB(), false]
+	_collect_aabb(visual, Transform3D.IDENTITY, state)
+	var aabb: AABB = state[0]
+	var size = aabb.size if state[1] and aabb.size != Vector3.ZERO else Vector3(1,1,1)
+
 	match cshape:
 		"sphere":
-			var s = SphereShape3D.new(); s.radius = 0.5
+			var s = SphereShape3D.new(); s.radius = max(size.x, size.z) * 0.5
 			shape = s
 		"capsule":
-			var s = CapsuleShape3D.new(); s.radius = 0.3; s.height = 1.5
+			var s = CapsuleShape3D.new(); s.radius = max(size.x, size.z) * 0.4; s.height = size.y
 			shape = s
-		_:  # box — size depends on actor type
-			var s = BoxShape3D.new()
-			if   type == "car":      s.size = Vector3(2.0, 0.9, 4.5)
-			elif type == "humanoid": s.size = Vector3(0.5, 1.8, 0.3)
-			elif type == "plane":    s.size = Vector3(6.0, 2.5, 5.0)
-			else:                    s.size = Vector3(1.0, 1.0, 1.0)
+		_:  # box
+			var s = BoxShape3D.new(); s.size = size
 			shape = s
 	cs.shape = shape
 	return cs
 
-func _create_rigid_actor(type: String, id: String, pos: Vector3, rot: Vector3, phys: Dictionary) -> RigidBody3D:
+
+func _create_rigid_actor(id: String, pos: Vector3, rot: Vector3, phys: Dictionary, visual: Node3D) -> RigidBody3D:
 	var rb  = RigidBody3D.new()
 	rb.name = id
 	rb.position         = pos
 	rb.rotation_degrees = rot
 
-	# Physics material
 	var pm_res = PhysicsMaterial.new()
 	pm_res.friction = float(phys.get("friction", 0.6))
 	pm_res.bounce   = float(phys.get("bounce",   0.2))
@@ -469,40 +453,24 @@ func _create_rigid_actor(type: String, id: String, pos: Vector3, rot: Vector3, p
 	rb.mass          = float(phys.get("mass",          70.0))
 	rb.gravity_scale = float(phys.get("gravity_scale", 1.0))
 
-	# Visual mesh as child
-	var visual: Node3D
-	match type:
-		"humanoid": visual = _create_humanoid()
-		"car":      visual = _create_car()
-		"plane":    visual = _create_plane()
-		_:          visual = _create_box(Vector3(1,1,1), Color.GRAY)
 	rb.add_child(visual)
+	rb.add_child(_make_collision_shape(visual, str(phys.get("collision_shape", "box"))))
 
-	# Collision shape
-	rb.add_child(_make_collision_shape(type, str(phys.get("collision_shape", "box"))))
-
-	# Initial velocities applied after spawn via call_deferred
 	var lv_d = phys.get("initial_linear_velocity",  {"x":0,"y":0,"z":0})
 	var av_d = phys.get("initial_angular_velocity", {"x":0,"y":0,"z":0})
 	rb.linear_velocity  = Vector3(float(lv_d.get("x",0)), float(lv_d.get("y",0)), float(lv_d.get("z",0)))
 	rb.angular_velocity = Vector3(float(av_d.get("x",0)), float(av_d.get("y",0)), float(av_d.get("z",0)))
 	return rb
 
-func _create_static_actor(type: String, id: String, pos: Vector3, rot: Vector3, phys: Dictionary) -> StaticBody3D:
+func _create_static_actor(id: String, pos: Vector3, rot: Vector3, phys: Dictionary, visual: Node3D) -> StaticBody3D:
 	var sb  = StaticBody3D.new()
 	sb.name = id
 	sb.position         = pos
 	sb.rotation_degrees = rot
-
-	var visual: Node3D
-	match type:
-		"humanoid": visual = _create_humanoid()
-		"car":      visual = _create_car()
-		"plane":    visual = _create_plane()
-		_:          visual = _create_box(Vector3(1,1,1), Color.GRAY)
 	sb.add_child(visual)
-	sb.add_child(_make_collision_shape(type, str(phys.get("collision_shape", "box"))))
+	sb.add_child(_make_collision_shape(visual, str(phys.get("collision_shape", "box"))))
 	return sb
+
 
 func _create_box(size: Vector3, color: Color) -> Node3D:
 	var mi  = MeshInstance3D.new()
@@ -529,154 +497,10 @@ func _add_box(root: Node3D, mat: StandardMaterial3D, size: Vector3, pos: Vector3
 	root.add_child(mi)
 
 func _add_sphere(root: Node3D, mat: StandardMaterial3D, radius: float, pos: Vector3) -> void:
-	var mi = MeshInstance3D.new()
-	var sm = SphereMesh.new(); sm.radius = radius; sm.height = radius * 2.0
-	mi.mesh = sm; mi.material_override = mat; mi.position = pos
-	root.add_child(mi)
 
-func _add_cyl(root: Node3D, mat: StandardMaterial3D, r: float, h: float, pos: Vector3, rot_deg: Vector3 = Vector3.ZERO) -> void:
-	var mi = MeshInstance3D.new()
-	var cm = CylinderMesh.new(); cm.top_radius = r; cm.bottom_radius = r; cm.height = h
-	mi.mesh = cm; mi.material_override = mat
-	mi.position = pos; mi.rotation_degrees = rot_deg
-	root.add_child(mi)
-
-# ── Humanoid: full 14-part anatomy, Y=0 = ground, total height ≈ 1.80 ──────────
-# Proportions (in metres):
-#   feet 0–0.10 | shin 0.10–0.50 | thigh 0.50–0.85 | hips 0.83
-#   waist 0.92 | chest 1.00–1.40 | shoulders 1.38
-#   neck 1.42–1.56 | head 1.56–1.80
-func _create_humanoid() -> Node3D:
-	var body_c = HUMANOID_COLORS[_humanoid_idx % HUMANOID_COLORS.size()]
-	_humanoid_idx += 1
-	var skin_c  = Color(0.95, 0.76, 0.60)
-	var mat     = _make_mat(body_c)
-	var skin    = _make_mat(skin_c)
-	var root    = Node3D.new()
-
-	# Head
-	_add_sphere(root, skin, 0.155, Vector3(0, 1.67, 0))
-	# Neck
-	_add_cyl(root, skin, 0.055, 0.13, Vector3(0, 1.52, 0))
-	# Chest
-	_add_box(root, mat, Vector3(0.46, 0.42, 0.22), Vector3(0, 1.20, 0))
-	# Waist (narrow)
-	_add_box(root, mat, Vector3(0.35, 0.16, 0.19), Vector3(0, 0.93, 0))
-	# Hips
-	_add_box(root, mat, Vector3(0.42, 0.15, 0.22), Vector3(0, 0.80, 0))
-
-	# Arms (left = −X, right = +X)
-	for sx in [-1.0, 1.0]:
-		var ax = sx * 0.31
-		# Shoulder cap
-		_add_sphere(root, mat, 0.085, Vector3(sx * 0.27, 1.38, 0))
-		# Upper arm
-		_add_cyl(root, mat, 0.07, 0.28, Vector3(ax, 1.10, 0))
-		# Elbow
-		_add_sphere(root, skin, 0.065, Vector3(ax, 0.95, 0))
-		# Forearm
-		_add_cyl(root, mat, 0.058, 0.25, Vector3(ax, 0.74, 0))
-		# Hand
-		_add_box(root, skin, Vector3(0.11, 0.10, 0.065), Vector3(ax, 0.58, 0))
-
-	# Legs (left = −X, right = +X)
-	for sx in [-1.0, 1.0]:
-		var lx = sx * 0.115
-		# Thigh
-		_add_box(root, mat, Vector3(0.18, 0.36, 0.18), Vector3(lx, 0.60, 0))
-		# Knee
-		_add_sphere(root, skin, 0.075, Vector3(lx, 0.41, 0.02))
-		# Shin
-		_add_box(root, mat, Vector3(0.14, 0.32, 0.14), Vector3(lx, 0.21, 0))
-		# Ankle
-		_add_sphere(root, skin, 0.062, Vector3(lx, 0.06, 0))
-		# Foot
-		_add_box(root, skin, Vector3(0.13, 0.09, 0.22), Vector3(lx, 0.045, 0.05))
-
-	return root
-
-# ── Car: sedan-style, Y=0 = ground, length ≈ 4.5, width ≈ 2.0, height ≈ 1.45 ──
-func _create_car() -> Node3D:
-	var body_c   = CAR_COLORS[_car_idx % CAR_COLORS.size()]
-	_car_idx    += 1
-	var root     = Node3D.new()
-
-	var mat_body   = _make_mat(body_c,            0.4, 0.1)
-	var mat_glass  = _make_mat(Color(0.55,0.75,0.85, 0.6), 0.05, 0.0)
-	mat_glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	var mat_wheel  = _make_mat(Color(0.12, 0.12, 0.12), 0.9)
-	var mat_rim    = _make_mat(Color(0.80, 0.80, 0.82), 0.3, 0.8)
-	var mat_bump   = _make_mat(body_c.darkened(0.25), 0.7)
-	var mat_head   = _make_mat(Color(1.0, 0.98, 0.85), 0.1, 0.0)
-	var mat_tail   = _make_mat(Color(0.95, 0.10, 0.10), 0.2, 0.0)
-	var mat_rubber = _make_mat(Color(0.08, 0.08, 0.08), 0.95)
-
-	# ── Main body (low chassis + hood/trunk) ──
-	_add_box(root, mat_body,  Vector3(2.02, 0.48, 4.50), Vector3(0, 0.44, 0.0))
-
-	# ── Cabin (upper box, slightly inset) ──
-	_add_box(root, mat_body,  Vector3(1.76, 0.58, 2.35), Vector3(0, 1.01, 0.18))
-
-	# ── Windshield (front, tilted) ──
-	_add_box(root, mat_glass, Vector3(1.52, 0.60, 0.07), Vector3(0, 0.97, -0.96), Vector3(-22, 0, 0))
-	# ── Rear window (tilted other way) ──
-	_add_box(root, mat_glass, Vector3(1.52, 0.50, 0.07), Vector3(0, 0.97,  1.32), Vector3( 22, 0, 0))
-	# ── Side windows (left and right) ──
-	for sx in [-1.0, 1.0]:
-		_add_box(root, mat_glass, Vector3(0.07, 0.38, 1.60), Vector3(sx * 0.88, 1.05, 0.18))
-
-	# ── Front bumper ──
-	_add_box(root, mat_bump,  Vector3(2.00, 0.28, 0.18), Vector3(0, 0.26, -2.33))
-	# ── Rear bumper ──
-	_add_box(root, mat_bump,  Vector3(2.00, 0.28, 0.18), Vector3(0, 0.26,  2.33))
-
-	# ── Headlights (2) ──
-	for sx in [-1.0, 1.0]:
-		_add_box(root, mat_head, Vector3(0.42, 0.18, 0.06), Vector3(sx * 0.62, 0.58, -2.27))
-	# ── Taillights (2) ──
-	for sx in [-1.0, 1.0]:
-		_add_box(root, mat_tail, Vector3(0.42, 0.15, 0.06), Vector3(sx * 0.62, 0.55,  2.27))
-
-	# ── Door seam strips (decorative line) ──
-	for sx in [-1.0, 1.0]:
-		_add_box(root, mat_bump, Vector3(0.04, 0.06, 3.20), Vector3(sx * 1.01, 0.64, 0.0))
-
-	# ── Wheels: tire + rim ──
-	for xv in [-1.06, 1.06]:
-		for zv in [-1.45, 1.45]:
-			# Tire
-			_add_cyl(root, mat_wheel, 0.36, 0.26, Vector3(xv, 0.37, zv), Vector3(0, 0, 90))
-			# Rim inner disk
-			_add_cyl(root, mat_rim,   0.22, 0.28, Vector3(xv, 0.37, zv), Vector3(0, 0, 90))
-			# Hub cap
-			_add_cyl(root, mat_rim,   0.06, 0.30, Vector3(xv, 0.37, zv), Vector3(0, 0, 90))
-			# Rubber sidewall ring
-			_add_cyl(root, mat_rubber, 0.36, 0.04, Vector3(xv, 0.37, zv), Vector3(0, 0, 90))
-
-	return root
-
-# ── Plane: simple procedural airplane ──
-func _create_plane() -> Node3D:
-	var body_c   = CAR_COLORS[_car_idx % CAR_COLORS.size()]
-	_car_idx    += 1
-	var root     = Node3D.new()
-
-	var mat_body   = _make_mat(body_c, 0.4, 0.2)
-	var mat_glass  = _make_mat(Color(0.2, 0.2, 0.2), 0.1, 0.8)
-	var mat_wing   = _make_mat(body_c.lightened(0.2), 0.5)
-
-	# Main fuselage
-	_add_box(root, mat_body, Vector3(1.2, 1.2, 4.0), Vector3(0, 1.0, 0))
-	# Cockpit / Nose
-	_add_box(root, mat_glass, Vector3(0.8, 0.8, 1.0), Vector3(0, 1.2, -2.0))
-	# Main wings
-	_add_box(root, mat_wing, Vector3(6.0, 0.2, 1.5), Vector3(0, 1.0, -0.5))
-	# Tail fin
-	_add_box(root, mat_wing, Vector3(0.2, 1.5, 1.0), Vector3(0, 2.0, 1.5))
-	# Rear stabilizers
-	_add_box(root, mat_wing, Vector3(2.5, 0.1, 0.8), Vector3(0, 1.2, 1.6))
-
-	return root
+# ──────────────────────────────────────────────
+# Animation building
+# ──────────────────────────────────────────────
 
 # ──────────────────────────────────────────────
 # Animation building

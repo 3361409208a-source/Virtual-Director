@@ -237,8 +237,9 @@ asset_tool: dict = {
                         "type": "object",
                         "properties": {
                             "actor_id": {"type": "string", "description": "演员ID"},
-                            "type": {"type": "string", "enum": ["builtin", "composite"], "description": "如果使用引擎原本的则选 builtin，如果是自行拼装的特殊物体则选 composite"},
+                            "type": {"type": "string", "enum": ["composite"], "description": "强制使用 composite 类型进行自定义模型拼装"},
                             "parts": {
+
                                 "type": "array",
                                 "description": "当 type 为 composite 时，给出用于拼装该物体的各个部件",
                                 "items": {
