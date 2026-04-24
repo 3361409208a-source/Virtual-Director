@@ -24,10 +24,23 @@ export function ProjectPanel({ activeProjectId, onSelectProject }: Props) {
   };
 
   useEffect(() => {
+    // Initial load on mount
     loadList();
-    const id = setInterval(loadList, 5000);
-    return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    // Only poll the server if the panel is open OR if a project is actively generating
+    const hasGenerating = projects.some(p => p.status === 'generating');
+    let id: number | undefined;
+    
+    if (open || hasGenerating) {
+      id = window.setInterval(loadList, 5000);
+    }
+    return () => {
+      if (id) window.clearInterval(id);
+    };
+  }, [open, projects]);
+
 
   const openProject = async (pid: string) => {
     setLoading(true);
