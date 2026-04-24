@@ -5,9 +5,10 @@ from backend.services.project_store import list_projects, get_project, get_proje
 router = APIRouter()
 
 @router.get("/projects")
-def get_projects():
-    """List all saved projects (newest first)."""
-    return {"projects": list_projects()}
+def get_projects(limit: int = 50, offset: int = 0):
+    """List saved projects with pagination (newest first)."""
+    return {"projects": list_projects(limit=limit, offset=offset)}
+
 
 @router.get("/projects/{pid}")
 def get_project_detail(pid: str):

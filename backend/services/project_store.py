@@ -64,21 +64,34 @@ def save_video(pid: str, src_video_path: str) -> bool:
     shutil.copy2(src_video_path, dst)
     return True
 
-def list_projects() -> list[dict]:
-    """Return list of project metadata (newest first)."""
+def list_projects(limit: int = 50, offset: int = 0) -> list[dict]:
+    """Return list of project metadata (newest first, with pagination)."""
     projects = []
-    for name in os.listdir(PROJECTS_DIR):
+    # Get all folder names (which are IDs) and sort them first to avoid reading too many files
+    # folders = sorted(os.listdir(PROJECTS_DIR), reverse=True)
+    # Actually, created_at is more reliable than name, but name usually matches timestamp.
+    
+    all_names = os.listdir(PROJECTS_DIR)
+    
+    # Simple strategy: read all and paginate. 
+    # For large scale, we'd need a real DB or a cache.
+    for name in all_names:
         d = os.path.join(PROJECTS_DIR, name)
         meta_path = os.path.join(d, "meta.json")
         if not os.path.isdir(d) or not os.path.exists(meta_path):
             continue
-        with open(meta_path, "r", encoding="utf-8") as f:
-            meta = json.load(f)
-        meta["has_video"] = os.path.exists(os.path.join(d, "video.mp4"))
-        meta["has_sequence"] = os.path.exists(os.path.join(d, "sequence.json"))
-        projects.append(meta)
+        try:
+            with open(meta_path, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+            meta["has_video"] = os.path.exists(os.path.join(d, "video.mp4"))
+            meta["has_sequence"] = os.path.exists(os.path.join(d, "sequence.json"))
+            projects.append(meta)
+        except Exception:
+            continue
+            
     projects.sort(key=lambda p: p.get("created_at", ""), reverse=True)
-    return projects
+    return projects[offset : offset + limit]
+
 
 def get_project(pid: str) -> Optional[dict]:
     """Return full project data: meta + chat + sequence."""
