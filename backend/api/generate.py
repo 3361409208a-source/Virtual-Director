@@ -61,6 +61,7 @@ async def generate_video(req: PromptRequest):
             meta = director["meta"]
             if isinstance(meta, str):
                 meta = json.loads(meta)
+                director["meta"] = meta  # write back so workers get the dict
             m = f"✅ [总导演] 片长 {meta['total_duration']}s · 卡司 {director['actor_ids']} · 五组工作组待命"
             _save("director_done", m)
             yield _emit("director_done", m)
