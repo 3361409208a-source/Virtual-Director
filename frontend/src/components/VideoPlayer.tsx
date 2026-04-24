@@ -7,6 +7,7 @@ interface Props {
   isRendering: boolean;
   sequence: SceneSequence | null;
   currentStep: string;
+  currentMsg: string;
 }
 
 // ── Step metadata ────────────────────────────────────────────────────────────
@@ -43,7 +44,7 @@ const DIRECTOR_QUOTES = [
   '「场景已渲染 42 帧，离宇宙真理还差 83 帧。」',
 ];
 
-function RenderingOverlay({ step }: { step: string }) {
+function RenderingOverlay({ step, msg }: { step: string; msg: string }) {
   const meta = STEP_META[step] ?? {
     label: 'AI 热身中', mood: '多智能体流水线正在启动…', progress: 3, icon: '✨',
   };
@@ -82,6 +83,13 @@ function RenderingOverlay({ step }: { step: string }) {
         <div className="render-step-label">{meta.label}</div>
         <div className="render-mood">{meta.mood}</div>
 
+        {/* Live render progress message */}
+        {step === 'rendering' && msg && (
+          <div className="render-render-msg">
+            {msg.replace('🎬 [渲染农场] ', '')}
+          </div>
+        )}
+
         {/* Thin progress bar */}
         <div className="render-progress-wrap">
           <div className="render-progress-bar" style={{ width: `${meta.progress}%` }} />
@@ -107,7 +115,7 @@ function RenderingOverlay({ step }: { step: string }) {
   );
 }
 
-export function VideoPlayer({ videoUrl, isRendering, sequence, currentStep }: Props) {
+export function VideoPlayer({ videoUrl, isRendering, sequence, currentStep, currentMsg }: Props) {
   return (
     <div className="glass-panel video-section">
       <div className="video-container">
@@ -116,7 +124,7 @@ export function VideoPlayer({ videoUrl, isRendering, sequence, currentStep }: Pr
         ) : isRendering && sequence ? (
           <ScenePreview sequence={sequence} />
         ) : isRendering ? (
-          <RenderingOverlay step={currentStep} />
+          <RenderingOverlay step={currentStep} msg={currentMsg} />
         ) : (
           <div className="placeholder-content">
             <div className="placeholder-icon">🎬</div>

@@ -87,7 +87,7 @@ def _bake_actor_positions(actor_tracks: dict, total_frames: int, fps: int) -> di
 
 # ── Main Blender scene builder ────────────────────────────────────────────────
 
-def _build_and_render(sequence: dict, mp4_path: str) -> None:
+def _build_and_render(sequence: dict, mp4_path: str, progress_cb=None) -> None:
     import bpy                       # noqa: imported inside so outer code can still load the module
     from mathutils import Vector, Euler
 
@@ -255,8 +255,9 @@ def _build_and_render(sequence: dict, mp4_path: str) -> None:
         _bake_camera(cam_obj, cam_data, cam_track, baked_positions,
                      actor_objects, total_frames, fps, scene)
 
-    # ── 10. Render frames ────────────────────────────────────────────────────
+    # ── 10. Render frames ─────────────────────────────────────────────────────
     print(f"[BlenderRenderer] Rendering {total_frames} frames @ {fps}fps -> {frames_dir}")
+
     bpy.ops.render.render(animation=True)
     print("[BlenderRenderer] Frames done. Assembling MP4 with ffmpeg…")
 
@@ -559,17 +560,18 @@ def _fallback_box(actor_id: str, scene) -> "bpy.types.Object":
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
-def do_blender(sequence: dict, mp4_path: str) -> None:
+def do_blender(sequence: dict, mp4_path: str, progress_cb=None) -> None:
     """
     Render sequence dict to mp4_path.
     Tries direct bpy import first; falls back to blender subprocess.
+    progress_cb(frame: int, total: int) is called after each frame is written.
     """
     os.makedirs(os.path.dirname(mp4_path), exist_ok=True)
 
     try:
         import bpy  # noqa
         print("[BlenderRenderer] Using bpy pip module.")
-        _build_and_render(sequence, mp4_path)
+        _build_and_render(sequence, mp4_path, progress_cb)
         return
     except ImportError:
         pass

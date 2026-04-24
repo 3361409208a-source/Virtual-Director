@@ -21,6 +21,7 @@ export default function App() {
   const [sequence, setSequence]       = useState<SceneSequence | null>(null);
   const [model, setModel]             = useState<ModelSelection>('deepseek-v4-flash');
   const [currentStep, setCurrentStep]  = useState<string>('');
+  const [currentMsg, setCurrentMsg]    = useState<string>('');
 
   const [viewingProject, setViewingProject] = useState<{ id: string; videoUrl: string | null; sequence: SceneSequence | null } | null>(null);
 
@@ -30,6 +31,19 @@ export default function App() {
         ? { ...m, entries: [...(m.entries ?? []), entry] }
         : m
     ));
+
+  const updateLastEntry = (logId: string, step: string, msg: string) =>
+    setMessages(prev => prev.map(m => {
+      if (m.id !== logId) return m;
+      const entries = [...(m.entries ?? [])];
+      for (let i = entries.length - 1; i >= 0; i--) {
+        if (entries[i].step === step) {
+          entries[i] = { ...entries[i], msg, ts: Date.now() };
+          return { ...m, entries };
+        }
+      }
+      return { ...m, entries: [...entries, { step, msg, ts: Date.now() }] };
+    }));
 
   const handleSend = async () => {
     if (!input.trim() || isRendering) return;
@@ -47,17 +61,24 @@ export default function App() {
 
     try {
       await streamGenerate(input, event => {
-        appendEntry(logId, { step: event.step, msg: event.msg, ts: Date.now() });
+        if (event.step === 'rendering') {
+          updateLastEntry(logId, 'rendering', event.msg);
+        } else {
+          appendEntry(logId, { step: event.step, msg: event.msg, ts: Date.now() });
+        }
         setCurrentStep(event.step);
+        setCurrentMsg(event.msg);
         if (event.step === 'scene_preview' && event.sequence) {
           setSequence(event.sequence);
         } else if (event.step === 'done') {
           if (event.video_url) setVideoUrl(event.video_url);
           setIsRendering(false);
           setCurrentStep('');
+          setCurrentMsg('');
         } else if (event.step === 'error') {
           setIsRendering(false);
           setCurrentStep('');
+          setCurrentMsg('');
         }
       }, model);
     } catch (err: unknown) {
@@ -81,7 +102,7 @@ export default function App() {
         onSend={handleSend}
         onModelChange={setModel}
       />
-      <VideoPlayer videoUrl={viewingProject?.videoUrl ?? videoUrl} isRendering={isRendering} sequence={viewingProject?.sequence ?? sequence} currentStep={currentStep} />
+      <VideoPlayer videoUrl={viewingProject?.videoUrl ?? videoUrl} isRendering={isRendering} sequence={viewingProject?.sequence ?? sequence} currentStep={currentStep} currentMsg={currentMsg} />
       <ProjectPanel
         activeProjectId={viewingProject?.id ?? null}
         onSelectProject={(pid, seq) => {

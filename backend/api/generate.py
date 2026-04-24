@@ -178,10 +178,47 @@ async def generate_video(req: PromptRequest):
 
             # ── Phase 4 & 5: Render ───────────────────────────────────────────
             if RENDERER == "blender":
-                m = "🎬 [渲染农场] Blender Cycles CPU 渲染中（每帧约 2s）..."
+                # Compute expected frame count for progress display
+                _meta = sequence.get("meta", {})
+                _total_f = int(float(_meta.get("total_duration", 5.0)) * min(int(_meta.get("fps", 24)), 12))
+                _frames_dir = mp4_path.replace(".mp4", "_frames")
+
+                render_state: dict = {"done": False, "err": None}
+                render_t0 = time.time()
+
+                async def _run_blender():
+                    try:
+                        await asyncio.to_thread(do_blender, sequence, mp4_path)
+                    except Exception as exc:
+                        render_state["err"] = exc
+                    finally:
+                        render_state["done"] = True
+
+                render_task = asyncio.ensure_future(_run_blender())
+                m = "🎬 [渲染农场] Blender Cycles CPU 初始化场景..."
                 _save("rendering", m)
                 yield _emit("rendering", m)
-                await asyncio.to_thread(do_blender, sequence, mp4_path)
+
+                while not render_state["done"]:
+                    await asyncio.sleep(2.0)
+                    elapsed = time.time() - render_t0
+                    # Count rendered PNGs as a proxy for frame progress
+                    try:
+                        frame_count = len([f for f in os.listdir(_frames_dir) if f.endswith(".png")]) if os.path.isdir(_frames_dir) else 0
+                    except OSError:
+                        frame_count = 0
+                    if _total_f > 0 and frame_count > 0:
+                        pct = min(int(frame_count / _total_f * 100), 99)
+                        m = f"🎬 [渲染农场] Blender Cycles · 帧 {frame_count}/{_total_f} ({pct}%) · {elapsed:.0f}s"
+                    else:
+                        m = f"🎬 [渲染农场] Blender Cycles 加载场景 · {elapsed:.0f}s"
+                    _save("rendering", m)
+                    yield _emit("rendering", m)
+
+                await render_task
+                if render_state["err"]:
+                    raise render_state["err"]
+
                 m = "✅ [渲染农场] Blender 渲染完成"
                 _save("rendering_done", m)
                 yield _emit("rendering_done", m)
