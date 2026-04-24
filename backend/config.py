@@ -18,6 +18,10 @@ PROJECTS_DIR          = os.path.join(ROOT_DIR, "projects")
 GODOT_EXECUTABLE    = r"D:\Program Files\Godot_v4.6.2-stable_win64.exe"
 GODOT_SCENE         = "main.tscn"
 
+# Renderer selection: 'godot' | 'blender'
+RENDERER            = os.environ.get("RENDERER", "blender")
+BLENDER_EXECUTABLE  = os.environ.get("BLENDER_EXECUTABLE", "")  # only needed if bpy not pip-installed
+
 DEEPSEEK_API_KEY    = os.environ.get("DEEPSEEK_API_KEY", "")
 
 DEEPSEEK_BASE_URL   = "https://api.deepseek.com"
