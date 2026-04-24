@@ -24,21 +24,25 @@ def do_godot(avi_path: str) -> None:
 def do_ffmpeg(avi_path: str, mp4_path: str, cover_path: str = None) -> None:
     """Convert AVI to H.264 MP4, optionally prepending a cover image."""
     if cover_path and os.path.exists(cover_path):
-        # Prepend 2 seconds of cover image
-        # We must rescale both to a common resolution (1152x648 from Godot)
+        # Prepend 2 seconds of cover image AND set it as metadata thumbnail
         cmd = [
             "ffmpeg", "-y",
             "-loop", "1", "-t", "2", "-i", cover_path,
             "-i", avi_path,
+            "-i", cover_path, # 3rd input for metadata
             "-filter_complex", 
             "[0:v]scale=1152:648:force_original_aspect_ratio=increase,crop=1152:648,setsar=1[v0]; " +
             "[1:v]scale=1152:648,setsar=1[v1]; " +
             "[v0][v1]concat=n=2:v=1:a=0[v]",
             "-map", "[v]",
-            "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+            "-map", "2:v", 
+            "-c:v:0", "libx264", "-preset", "fast", "-crf", "23",
+            "-c:v:1", "mjpeg", # Ensure image is mjpeg for cover
+            "-disposition:v:1", "attached_pic",
             "-pix_fmt", "yuv420p",
             mp4_path,
         ]
+
     else:
         cmd = [
             "ffmpeg", "-y", "-i", avi_path,
