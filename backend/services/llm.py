@@ -239,6 +239,8 @@ def llm_call(system: str, user: str, tool: dict) -> dict:
                         parsed = parsed[func_name]
                     elif len(parsed) == 1 and "parameters" in parsed and isinstance(parsed["parameters"], dict):
                         parsed = parsed["parameters"]
+                if not isinstance(parsed, dict):
+                    raise ValueError(f"Expected JSON object, got {type(parsed).__name__}: {args_str[:120]}")
                 return parsed
             except Exception as e:
 

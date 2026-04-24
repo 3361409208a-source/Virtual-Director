@@ -59,6 +59,8 @@ async def generate_video(req: PromptRequest):
             yield _emit("director", m)
             director = await asyncio.to_thread(run_director, req.prompt, ctx)
             meta = director["meta"]
+            if isinstance(meta, str):
+                meta = json.loads(meta)
             m = f"✅ [总导演] 片长 {meta['total_duration']}s · 卡司 {director['actor_ids']} · 五组工作组待命"
             _save("director_done", m)
             yield _emit("director_done", m)
