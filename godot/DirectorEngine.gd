@@ -14,7 +14,9 @@ var _attach_map: Dictionary = {}      # child_id → parent_id (for attached act
 
 func _ready():
 	print("DirectorEngine initialized.")
+	camera.make_current()
 	var sequence = _load_sequence("res://director_sequence.json")
+
 	if sequence.is_empty():
 		print("No valid director sequence found.")
 		return
@@ -50,7 +52,7 @@ func _actors_centroid() -> Vector3:
 	var sum   = Vector3.ZERO
 	var count = 0
 	for child in get_children():
-		if child is Node3D and child.name not in ["WorldEnvironment", "Sun", "Ground"]:
+		if child is Node3D and child.name not in ["WorldEnvironment", "Sun", "Ground", "Camera3D", "AnimationPlayer"]:
 			sum   += child.global_position
 			count += 1
 	return sum / max(count, 1)
@@ -79,17 +81,19 @@ func _update_camera(t: float, delta: float) -> void:
 	var smooth     = str(seg.get("transition", "smooth")) == "smooth"
 	var w          = 0.12 if smooth else 1.0  # lerp weight per frame at 60fps
 
+	var centroid = _actors_centroid()
+
 	match mode:
 		"follow":
 			var offset  = _v3(seg.get("offset", {"x":0,"y":2,"z":7}), 0, 2, 7)
-			var tpos    = _actor_pos(target_id, camera.global_position)
+			var tpos    = _actor_pos(target_id, centroid)
 			var desired = tpos + offset
 			camera.global_position = camera.global_position.lerp(desired, w)
 			var look_p = _actor_pos(look_at_id, tpos) + Vector3(0, 0.9, 0)
 			camera.look_at(look_p)
 
 		"orbit":
-			var tpos   = _actor_pos(target_id, Vector3.ZERO)
+			var tpos   = _actor_pos(target_id, centroid)
 			var radius = float(seg.get("radius", 7.0))
 			var height = float(seg.get("height", 3.0))
 			var speed  = float(seg.get("orbit_speed", 0.6))
@@ -101,17 +105,18 @@ func _update_camera(t: float, delta: float) -> void:
 		"static_look":
 			var desired = _v3(seg.get("position", {"x":8,"y":2,"z":0}), 8, 2, 0)
 			camera.global_position = camera.global_position.lerp(desired, w * 0.4)
-			var look_p = _actor_pos(look_at_id, _actors_centroid()) + Vector3(0, 0.9, 0)
+			var look_p = _actor_pos(look_at_id, centroid) + Vector3(0, 0.9, 0)
 			camera.look_at(look_p)
 
 		"wide_look":
 			var desired = _v3(seg.get("position", {"x":0,"y":12,"z":10}), 0, 12, 10)
 			camera.global_position = camera.global_position.lerp(desired, w * 0.3)
-			camera.look_at(_actors_centroid() + Vector3(0, 0.5, 0))
+			camera.look_at(centroid + Vector3(0, 0.5, 0))
 
 		"free":
 			# Legacy absolute-position keyframe — handled by AnimationPlayer if track exists
 			pass
+
 	
 	if Engine.get_frames_drawn() % 300 == 0:
 		print("Camera: ", camera.global_position, " looking at target: ", target_id)
