@@ -18,8 +18,13 @@ func _ready():
 	var sequence = _load_sequence("res://director_sequence.json")
 
 	if sequence.is_empty():
-		print("No valid director sequence found.")
+		print("No valid director sequence found. Quitting.")
+		get_tree().quit()
 		return
+
+
+	var meta = sequence.get("meta", {"total_duration": 5.0})
+	_total_duration = float(meta.get("total_duration", 5.0))
 
 	_asset_manifest = sequence.get("asset_manifest", {})
 	_setup_scene(sequence.get("scene_setup", {}))
@@ -30,11 +35,22 @@ func _ready():
 	print("Action!")
 	animation_player.play("director_cut")
 
+var _total_duration: float = 5.0
+var _elapsed_time: float = 0.0
+
 func _process(delta: float) -> void:
-	if not animation_player.is_playing():
-		return
-	var t = animation_player.current_animation_position
-	_update_camera(t, delta)
+	_elapsed_time += delta
+	
+	if animation_player.is_playing():
+		var t = animation_player.current_animation_position
+		_update_camera(t, delta)
+
+	# Force quit after duration + 1 second padding to ensure it doesn't hang forever
+	if _elapsed_time >= _total_duration + 1.0:
+		print("Cut! Time reached (", _elapsed_time, "s). Rendering complete. Forcing quit.")
+		get_tree().quit()
+
+
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
