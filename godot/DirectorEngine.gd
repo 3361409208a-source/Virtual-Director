@@ -40,9 +40,11 @@ func _v3(d: Dictionary, dx: float = 0.0, dy: float = 1.0, dz: float = 5.0) -> Ve
 	return Vector3(float(d.get("x", dx)), float(d.get("y", dy)), float(d.get("z", dz)))
 
 func _actor_pos(id: String, fallback: Vector3 = Vector3.ZERO) -> Vector3:
-	if id == "" or not has_node(NodePath(id)):
+	var node_path = _get_recursive_node_path(id)
+	if id == "" or not has_node(NodePath(node_path)):
 		return fallback
-	return get_node(NodePath(id)).global_position
+	return get_node(NodePath(node_path)).global_position
+
 
 func _actors_centroid() -> Vector3:
 	var sum   = Vector3.ZERO
@@ -110,6 +112,9 @@ func _update_camera(t: float, delta: float) -> void:
 		"free":
 			# Legacy absolute-position keyframe — handled by AnimationPlayer if track exists
 			pass
+	
+	if Engine.get_frames_drawn() % 300 == 0:
+		print("Camera: ", camera.global_position, " looking at target: ", target_id)
 
 func _load_sequence(path: String) -> Dictionary:
 	if not FileAccess.file_exists(path):
@@ -187,8 +192,15 @@ func _spawn_ground(ground_d: Dictionary) -> void:
 
 	var mi = MeshInstance3D.new()
 	var pm = PlaneMesh.new(); pm.size = Vector2(size, size)
+	# Add a subtle grid/checker pattern to ground for spatial reference
+	pm_mat.albedo_color = _c(ground_d.get("color", {"r":0.3,"g":0.3,"b":0.3}), 0.3, 0.3, 0.3)
+	pm_mat.roughness    = 1.0
 	mi.mesh = pm; mi.material_override = pm_mat
 	sb.add_child(mi)
+
+	# Add some "fake" grid lines using a second mesh or just dark lines
+	# For now, let's just make it a bit brighter to ensure it's visible
+
 
 	var cs    = CollisionShape3D.new()
 	var shape = WorldBoundaryShape3D.new()   # infinite flat plane at Y=0
