@@ -1,18 +1,16 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
 
 :root {
-  --bg-color:       #070d1a;
-  --panel-bg:       rgba(10, 20, 45, 0.82);
-  --border-color:   rgba(0, 196, 255, 0.14);
-  --border-glow:    rgba(0, 196, 255, 0.35);
-  --text-primary:   #e2edff;
-  --text-secondary: rgba(148, 175, 210, 0.85);
-  --accent-color:   #00c4ff;
-  --accent-glow:    rgba(0, 196, 255, 0.22);
-  --success-color:  #22d06a;
-  --warn-color:     #f59e0b;
-  --msg-user-bg:    rgba(0, 196, 255, 0.09);
-  --msg-ai-bg:      rgba(255, 255, 255, 0.035);
+  --bg-color:       #f5f5f7;
+  --panel-bg:       #ffffff;
+  --border-color:   rgba(0, 0, 0, 0.07);
+  --text-primary:   #1d1d1f;
+  --text-secondary: #6e6e73;
+  --accent-color:   #0071e3;
+  --success-color:  #34c759;
+  --warn-color:     #ff9f0a;
+  --msg-user-bg:    #f2f2f7;
+  --msg-ai-bg:      #ffffff;
 }
 
 * {
@@ -22,18 +20,14 @@
 }
 
 body {
-  font-family: 'Inter', sans-serif;
-  background: #070d1a;
-  background-image:
-    radial-gradient(ellipse at 15% 85%, rgba(0, 80, 180, 0.25) 0%, transparent 55%),
-    radial-gradient(ellipse at 85% 15%, rgba(0, 40, 120, 0.2) 0%, transparent 50%),
-    radial-gradient(ellipse at 50% 50%, rgba(0, 20, 70, 0.4) 0%, transparent 80%);
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Inter', sans-serif;
+  background: var(--bg-color);
   color: var(--text-primary);
   min-height: 100vh;
   display: flex;
   justify-content: center;
   align-items: center;
-  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
 }
 
 .app-container {
@@ -47,14 +41,9 @@ body {
 .glass-panel {
   background: var(--panel-bg);
   border: 1px solid var(--border-color);
-  border-radius: 14px;
-  padding: 20px;
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  box-shadow:
-    0 0 0 1px rgba(0, 196, 255, 0.04) inset,
-    0 8px 40px rgba(0, 0, 0, 0.5),
-    0 0 60px rgba(0, 100, 200, 0.06);
+  border-radius: 18px;
+  padding: 22px;
+  box-shadow: 0 2px 20px rgba(0, 0, 0, 0.06);
   display: flex;
   flex-direction: column;
 }
@@ -72,11 +61,10 @@ body {
 }
 
 .header h1 {
-  font-size: 18px;
-  font-weight: 700;
+  font-size: 17px;
+  font-weight: 600;
   color: var(--text-primary);
-  letter-spacing: 0.02em;
-  text-shadow: 0 0 20px rgba(0, 196, 255, 0.4);
+  letter-spacing: -0.3px;
 }
 
 .header p {
@@ -117,7 +105,6 @@ body {
 
 .message.user {
   background: var(--msg-user-bg);
-  border: 1px solid rgba(0, 196, 255, 0.18);
   align-self: flex-end;
   color: var(--text-primary);
 }
@@ -136,20 +123,21 @@ body {
 
 .input-area input {
   flex: 1;
-  background: rgba(0, 196, 255, 0.05);
-  border: 1px solid var(--border-color);
+  background: #f2f2f7;
+  border: 1px solid transparent;
   padding: 11px 16px;
-  border-radius: 8px;
+  border-radius: 12px;
   color: var(--text-primary);
   font-family: inherit;
   font-size: 14px;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: box-shadow 0.2s;
   outline: none;
 }
-.input-area input::placeholder { color: rgba(148, 175, 210, 0.45); }
+.input-area input::placeholder { color: #aeaeb2; }
 .input-area input:focus {
-  border-color: rgba(0, 196, 255, 0.45);
-  box-shadow: 0 0 0 3px rgba(0, 196, 255, 0.1);
+  background: #fff;
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.12);
 }
 
 .model-toggle {
@@ -301,22 +289,19 @@ body {
 
 
 .input-area button {
-  background: linear-gradient(135deg, #0090d4, #00c4ff);
+  background: var(--accent-color);
   border: none;
   width: 44px;
-  border-radius: 8px;
-  color: #000;
+  border-radius: 12px;
+  color: #fff;
   cursor: pointer;
   display: flex;
   justify-content: center;
   align-items: center;
-  transition: opacity 0.2s, box-shadow 0.2s;
-  box-shadow: 0 0 16px rgba(0, 196, 255, 0.3);
+  transition: opacity 0.15s;
 }
-.input-area button:hover {
-  opacity: 0.9;
-  box-shadow: 0 0 22px rgba(0, 196, 255, 0.5);
-}
+.input-area button:hover  { opacity: 0.85; }
+.input-area button:active { opacity: 0.7;  }
 
 /* Video Section */
 .video-section {
@@ -327,8 +312,8 @@ body {
 .video-container {
   width: 100%;
   height: 100%;
-  border-radius: 10px;
-  background: rgba(4, 10, 25, 0.9);
+  border-radius: 12px;
+  background: #f2f2f7;
   border: 1px solid var(--border-color);
   position: relative;
   overflow: hidden;
@@ -343,16 +328,16 @@ body {
 }
 
 .placeholder-icon {
-  font-size: 40px;
-  margin-bottom: 12px;
-  filter: drop-shadow(0 0 12px rgba(0,196,255,0.5));
+  font-size: 36px;
+  margin-bottom: 10px;
+  opacity: 0.35;
 }
 
 /* Loader */
 .loader {
-  width: 24px;
-  height: 24px;
-  border: 2px solid rgba(0, 196, 255, 0.2);
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(0, 0, 0, 0.1);
   border-radius: 50%;
   border-top-color: var(--accent-color);
   animation: spin 0.8s linear infinite;
@@ -398,15 +383,14 @@ video {
   letter-spacing: 0.02em;
 }
 .wf-badge.active {
-  background: rgba(245, 158, 11, 0.15);
-  color: #fbbf24;
-  border: 1px solid rgba(245, 158, 11, 0.35);
-  box-shadow: 0 0 8px rgba(245, 158, 11, 0.2);
+  background: rgba(255, 159, 10, 0.1);
+  color: #c6720a;
+  border: 1px solid rgba(255, 159, 10, 0.25);
 }
 .wf-badge.done {
-  background: rgba(34, 208, 106, 0.12);
-  color: #4ade80;
-  border: 1px solid rgba(34, 208, 106, 0.3);
+  background: rgba(52, 199, 89, 0.1);
+  color: #248a3d;
+  border: 1px solid rgba(52, 199, 89, 0.25);
 }
 
 .wf-total {
@@ -454,6 +438,7 @@ video {
   flex: 1;
   color: var(--text-secondary);
   word-break: break-word;
+  font-size: 12.5px;
 }
 
 .wf-time {
@@ -465,7 +450,6 @@ video {
 .wf-time.live {
   color: var(--accent-color);
   animation: wf-pulse 1s ease-in-out infinite;
-  text-shadow: 0 0 8px rgba(0, 196, 255, 0.5);
 }
 @keyframes wf-pulse {
   0%, 100% { opacity: 1; }
@@ -519,14 +503,13 @@ video {
 .project-drawer {
   background: var(--panel-bg);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
-  box-shadow: 0 8px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,196,255,0.04) inset;
+  border-radius: 18px;
+  box-shadow: 0 2px 20px rgba(0,0,0,0.06);
   height: 100%;
   width: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  backdrop-filter: blur(20px);
 }
 .project-drawer-header {
   display: flex;
@@ -575,13 +558,8 @@ video {
   transition: background 0.15s;
   border: 1px solid transparent;
 }
-.project-card:hover {
-  background: rgba(0, 196, 255, 0.07);
-}
-.project-card.active {
-  background: rgba(0, 196, 255, 0.1);
-  border-color: rgba(0, 196, 255, 0.3);
-}
+.project-card:hover  { background: #f5f5f7; }
+.project-card.active { background: #f0f6ff; border-color: rgba(0, 113, 227, 0.2); }
 .project-card-title {
   font-size: 12px;
   font-weight: 500;
@@ -640,14 +618,14 @@ video {
 }
 .status-badge {
   font-size: 10px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: rgba(255,255,255,0.06);
+  padding: 2px 7px;
+  border-radius: 20px;
+  background: #f2f2f7;
   color: var(--text-secondary);
 }
 .status-badge.done {
-  background: rgba(34, 208, 106, 0.12);
-  color: #4ade80;
+  background: rgba(52, 199, 89, 0.12);
+  color: #248a3d;
 }
 .project-video {
   padding: 10px 14px;
@@ -671,14 +649,14 @@ video {
   display: block;
 }
 
-/* ── Render Overlay (dark sci-fi) ────────────────────────────── */
+/* ── Render Overlay (Apple style) ──────────────────────────── */
 .render-overlay {
   width: 100%;
   height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(4, 10, 28, 0.95);
+  background: #f2f2f7;
 }
 
 .render-overlay-body {
@@ -696,11 +674,10 @@ video {
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(0, 196, 255, 0.25);
-  border-radius: 14px;
-  background: rgba(0, 196, 255, 0.07);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.1);
   animation: ro-breathe 2.4s ease-in-out infinite;
-  box-shadow: 0 0 20px rgba(0, 196, 255, 0.15);
 }
 .render-icon-emoji { font-size: 28px; line-height: 1; }
 @keyframes ro-breathe {
@@ -711,10 +688,9 @@ video {
 /* Step label */
 .render-step-label {
   font-size: 15px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
-  letter-spacing: 0.04em;
-  text-shadow: 0 0 20px rgba(0, 196, 255, 0.3);
+  letter-spacing: -0.3px;
 }
 
 /* Mood */
@@ -735,10 +711,9 @@ video {
 }
 .render-progress-bar {
   height: 100%;
-  background: linear-gradient(90deg, #0080c4, #00c4ff);
+  background: var(--accent-color);
   border-radius: 2px;
   transition: width 0.7s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 0 8px rgba(0, 196, 255, 0.6);
 }
 
 /* Percentage */
@@ -782,31 +757,29 @@ video {
   animation: dot-pulse 1.2s ease-in-out infinite;
 }
 @keyframes dot-pulse {
-  0%,100% { box-shadow: 0 0 0 0 rgba(0, 196, 255, 0.4); }
-  50%     { box-shadow: 0 0 0 4px rgba(0, 196, 255, 0); }
+  0%,100% { box-shadow: 0 0 0 0 rgba(0, 113, 227, 0.3); }
+  50%     { box-shadow: 0 0 0 4px rgba(0, 113, 227, 0); }
 }
 .render-stage-name {
   font-size: 10px;
-  color: rgba(148, 175, 210, 0.5);
+  color: #aeaeb2;
   transition: color 0.3s;
 }
-.render-stage-name.done   { color: rgba(34, 208, 106, 0.7); }
+.render-stage-name.done   { color: var(--success-color); }
 .render-stage-name.active { color: var(--accent-color); font-weight: 600; }
 
 /* Quote */
 .render-render-msg {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--accent-color);
   text-align: center;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.03em;
-  opacity: 0.85;
-  min-height: 16px;
+  min-height: 17px;
 }
 
 .render-quote {
-  font-size: 11px;
-  color: rgba(148, 175, 210, 0.55);
+  font-size: 11.5px;
+  color: var(--text-secondary);
   text-align: center;
   line-height: 1.6;
   max-width: 240px;
