@@ -530,15 +530,22 @@ func _add_box(root: Node3D, mat: StandardMaterial3D, size: Vector3, pos: Vector3
 	root.add_child(mi)
 
 func _add_sphere(root: Node3D, mat: StandardMaterial3D, radius: float, pos: Vector3) -> void:
+	var mi = MeshInstance3D.new()
+	var sm = SphereMesh.new(); sm.radius = radius; sm.height = radius * 2.0
+	mi.mesh = sm; mi.material_override = mat
+	mi.position = pos
+	root.add_child(mi)
+
+func _add_cylinder(root: Node3D, mat: StandardMaterial3D, radius: float, height: float, pos: Vector3, rot_deg: Vector3 = Vector3.ZERO) -> void:
+	var mi = MeshInstance3D.new()
+	var cm = CylinderMesh.new(); cm.top_radius = radius; cm.bottom_radius = radius; cm.height = height
+	mi.mesh = cm; mi.material_override = mat
+	mi.position = pos; mi.rotation_degrees = rot_deg
+	root.add_child(mi)
 
 # ──────────────────────────────────────────────
 # Animation building
 # ──────────────────────────────────────────────
-
-# ──────────────────────────────────────────────
-# Animation building
-# ──────────────────────────────────────────────
-
 func _build_animation(data: Dictionary) -> void:
 	var anim = Animation.new()
 	var meta = data.get("meta", {"total_duration": 5.0, "fps": 60})
