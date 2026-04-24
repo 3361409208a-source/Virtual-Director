@@ -120,7 +120,18 @@ def _extract_json(s: str) -> dict:
     """Robustly extract and repair JSON from a string."""
     s = s.strip()
     
+    # Strip <think>...</think> blocks from reasoning models
+    import re
+    s = re.sub(r'<think>.*?</think>', '', s, flags=re.DOTALL).strip()
+    
+    # Strip markdown formatting
+    s = re.sub(r'^```json\s*', '', s, flags=re.MULTILINE)
+    s = re.sub(r'^```\s*', '', s, flags=re.MULTILINE)
+    s = re.sub(r'\s*```$', '', s, flags=re.MULTILINE)
+    s = s.strip()
+
     # 1. Try direct parse
+
     try:
         return json.loads(s)
     except json.JSONDecodeError as e:
@@ -168,60 +179,77 @@ def llm_call(system: str, user: str, tool: dict) -> dict:
     """Single LLM call that enforces a specific function tool and returns parsed args."""
     selection = _model_var.get()
     
-    # Provider-specific fallbacks
-    # NOTE: DeepSeek V4 API currently returns 400 errors for strict tool_choice on both flash and pro models.
-    # We MUST fallback to deepseek-chat for all structural agent tasks until they fix this.
-    if selection in ["deepseek-reasoner", "deepseek-v4-pro", "deepseek-v4-flash"]:
-        print(f"⚠️ {selection} 暂不支持强工具调用，已自动切换至 deepseek-chat 完成结构化任务")
-        selection = "deepseek-chat"
-
-
-
-
     client, model = _get_client_config(selection)
     if not client:
         raise RuntimeError(f"Unsupported model selection: {selection}")
 
-    retries = 2
-    last_error = None
+    # DeepSeek V4 API currently returns 400 errors for strict tool_choice on both flash and pro models.
+    # We will use Prompt Engineering (JSON mode) for them.
+    supports_tools = selection not in ["deepseek-reasoner", "deepseek-v4-pro", "deepseek-v4-flash"]
+
     messages = [
         {"role": "system", "content": system},
         {"role": "user",   "content": user},
     ]
 
+    if not supports_tools:
+        schema_str = json.dumps(tool["function"], ensure_ascii=False)
+        messages[0]["content"] += (
+            f"\n\n[CRITICAL INSTRUCTION]\n"
+            f"You MUST output ONLY valid JSON matching this schema:\n{schema_str}\n"
+            f"Do NOT wrap in markdown blocks, do NOT add explanations. Output RAW JSON ONLY."
+        )
+
+    retries = 2
+    last_error = None
+
     for attempt in range(retries + 1):
         try:
-            resp = client.chat.completions.create(
-                model=model,
-                messages=messages,
-                tools=[tool],
-                tool_choice={"type": "function", "function": {"name": tool["function"]["name"]}},
-            )
+            if supports_tools:
+                resp = client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    tools=[tool],
+                    tool_choice={"type": "function", "function": {"name": tool["function"]["name"]}},
+                )
+                tool_calls = resp.choices[0].message.tool_calls
+                if not tool_calls:
+                    content = resp.choices[0].message.content
+                    if content:
+                        try:
+                            return _extract_json(content)
+                        except Exception:
+                            pass
+                    raise RuntimeError(f"LLM did not return a tool call. Content: {content}")
+                
+                args_str = tool_calls[0].function.arguments
+            else:
+                resp = client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                )
+                args_str = resp.choices[0].message.content
 
-            
-            tool_calls = resp.choices[0].message.tool_calls
-            if not tool_calls:
-                content = resp.choices[0].message.content
-                if content:
-                    try:
-                        return _extract_json(content)
-                    except Exception:
-                        pass
-                raise RuntimeError(f"LLM did not return a tool call. Content: {content}")
-
-            args_str = tool_calls[0].function.arguments
             try:
                 return _extract_json(args_str)
             except Exception as e:
                 print(f"Attempt {attempt + 1} failed to parse JSON: {args_str[:200]}...")
                 last_error = e
                 # Add the error to conversation and retry
-                messages.append({"role": "assistant", "content": None, "tool_calls": tool_calls})
-                messages.append({
-                    "role": "tool", 
-                    "tool_call_id": tool_calls[0].id,
-                    "content": f"JSON解析失败: {str(e)}。请确保所有字符串字段都用双引号括起来，并且JSON格式严格正确。"
-                })
+                if supports_tools:
+                    tool_calls = resp.choices[0].message.tool_calls
+                    messages.append({"role": "assistant", "content": None, "tool_calls": tool_calls})
+                    messages.append({
+                        "role": "tool", 
+                        "tool_call_id": tool_calls[0].id,
+                        "content": f"JSON解析失败: {str(e)}。请确保所有字符串字段都用双引号括起来，并且JSON格式严格正确。"
+                    })
+                else:
+                    messages.append({"role": "assistant", "content": args_str})
+                    messages.append({
+                        "role": "user", 
+                        "content": f"Validation failed: {str(e)}. Please correct your JSON formatting and try again. Output ONLY raw JSON."
+                    })
                 continue
         except Exception as e:
             if attempt == retries:
