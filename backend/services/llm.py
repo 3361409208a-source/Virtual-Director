@@ -15,22 +15,31 @@ _model_var: ContextVar[str] = ContextVar("deepseek_model", default="deepseek-v4-
 
 
 
-def _get_client_config(model: str):
+def _get_client_config(selection: str):
     """Return the correct OpenAI client and model name for the given selection."""
-    if model.startswith("deepseek"):
+    # Map old IDs to new V4 IDs for backward compatibility
+    model_map = {
+        "deepseek-chat": "deepseek-v4-flash",
+        "deepseek-reasoner": "deepseek-v4-pro",
+    }
+    target_model = model_map.get(selection, selection)
+
+    if target_model.startswith("deepseek"):
         return OpenAI(
             api_key=DEEPSEEK_API_KEY,
             base_url=DEEPSEEK_BASE_URL,
             timeout=120.0,
             max_retries=3
-        ), model
-    elif model == "glm-4-flash":
+        ), target_model
+    elif target_model == "glm-4-flash":
         return OpenAI(
             api_key=GLM_API_KEY,
             base_url=GLM_BASE_URL,
             timeout=120.0,
             max_retries=3
         ), GLM_MODEL
+    return None, None
+
     return None, None
 
 
@@ -160,9 +169,10 @@ def llm_call(system: str, user: str, tool: dict) -> dict:
     selection = _model_var.get()
     
     # Provider-specific fallbacks
-    if selection == "deepseek-v4-pro":
+    if selection in ["deepseek-reasoner", "deepseek-v4-pro"]:
         print(f"⚠️ {selection} 不支持工具调用，已自动切换至 deepseek-v4-flash 完成结构化任务")
         selection = "deepseek-v4-flash"
+
 
 
     client, model = _get_client_config(selection)
