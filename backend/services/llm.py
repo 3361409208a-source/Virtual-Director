@@ -193,11 +193,12 @@ def llm_call(system: str, user: str, tool: dict) -> dict:
     ]
 
     if not supports_tools:
-        schema_str = json.dumps(tool["function"], ensure_ascii=False)
+        schema_str = json.dumps(tool["function"].get("parameters", {}), ensure_ascii=False)
         messages[0]["content"] += (
             f"\n\n[CRITICAL INSTRUCTION]\n"
-            f"You MUST output ONLY valid JSON matching this schema:\n{schema_str}\n"
-            f"Do NOT wrap in markdown blocks, do NOT add explanations. Output RAW JSON ONLY."
+            f"You MUST output ONLY valid JSON. The JSON must exactly match this JSON Schema:\n{schema_str}\n"
+            f"Do NOT wrap the output in a 'parameters' or '{tool['function']['name']}' key. Return the raw properties object directly.\n"
+            f"Do NOT include Markdown blocks (e.g. ```json), explanations, or any other text."
         )
 
     retries = 2
@@ -231,8 +232,17 @@ def llm_call(system: str, user: str, tool: dict) -> dict:
                 args_str = resp.choices[0].message.content
 
             try:
-                return _extract_json(args_str)
+                parsed = _extract_json(args_str)
+                # Defensive unwrapping: If the LLM wrapped the result in {"function_name": {...}} or {"parameters": {...}}
+                func_name = tool["function"]["name"]
+                if isinstance(parsed, dict):
+                    if len(parsed) == 1 and func_name in parsed and isinstance(parsed[func_name], dict):
+                        parsed = parsed[func_name]
+                    elif len(parsed) == 1 and "parameters" in parsed and isinstance(parsed["parameters"], dict):
+                        parsed = parsed["parameters"]
+                return parsed
             except Exception as e:
+
                 print(f"Attempt {attempt + 1} failed to parse JSON: {args_str[:200]}...")
                 last_error = e
                 # Add the error to conversation and retry
