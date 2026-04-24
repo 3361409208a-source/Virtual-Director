@@ -142,19 +142,23 @@ body {
   align-items: center;
   justify-content: center;
   gap: 1px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 10px;
-  padding: 4px 10px;
+  padding: 4px 12px;
   cursor: pointer;
-  min-width: 72px;
-  transition: background 0.2s, border-color 0.2s;
+  min-width: 84px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   flex-shrink: 0;
+  border: 1px solid var(--border-color);
+  background: #fff;
 }
 
 .model-toggle:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+
+.model-toggle:active:not(:disabled) {
+  transform: translateY(0);
 }
 
 .model-toggle:disabled {
@@ -162,18 +166,55 @@ body {
   cursor: not-allowed;
 }
 
+/* DeepSeek V3 */
+.model-toggle.model-deepseek-chat {
+  background: #f0f9ff;
+  border-color: #bae6fd;
+}
+.model-toggle.model-deepseek-chat .model-badge {
+  color: #0ea5e9;
+}
+.model-toggle.model-deepseek-chat .model-name {
+  color: #0369a1;
+}
+
+/* DeepSeek R1 */
+.model-toggle.model-deepseek-reasoner {
+  background: #fdf2f8;
+  border-color: #fbcfe8;
+}
+.model-toggle.model-deepseek-reasoner .model-badge {
+  color: #ec4899;
+}
+.model-toggle.model-deepseek-reasoner .model-name {
+  color: #be185d;
+}
+
+/* GLM 4.7 Flash */
+.model-toggle.model-glm-4-flash {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+.model-toggle.model-glm-4-flash .model-badge {
+  color: #22c55e;
+}
+.model-toggle.model-glm-4-flash .model-name {
+  color: #15803d;
+}
+
 .model-badge {
   font-size: 11px;
   font-weight: 700;
-  color: #7dd3fc;
   letter-spacing: 0.04em;
 }
 
 .model-name {
   font-size: 9px;
-  color: rgba(255, 255, 255, 0.45);
+  font-weight: 500;
   white-space: nowrap;
+  opacity: 0.8;
 }
+
 
 .input-area button {
   background: var(--accent-color);

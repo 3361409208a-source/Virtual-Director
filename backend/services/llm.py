@@ -1,24 +1,40 @@
 import json
 from contextvars import ContextVar
 from openai import OpenAI
-from backend.config import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL
-
-client = OpenAI(
-    api_key=DEEPSEEK_API_KEY,
-    base_url=DEEPSEEK_BASE_URL,
-    timeout=120.0,  # Increase timeout for reasoning models
-    max_retries=3,  # Add retries for transient connection errors
+from backend.config import (
+    DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL,
+    GLM_API_KEY, GLM_BASE_URL, GLM_MODEL
 )
 
 
-AVAILABLE_MODELS = ["deepseek-chat", "deepseek-reasoner"]
+# Providers and models
+AVAILABLE_MODELS = ["deepseek-chat", "deepseek-reasoner", "glm-4-flash"]
 
 # Per-request model override (safe for concurrent requests via asyncio context)
 _model_var: ContextVar[str] = ContextVar("deepseek_model", default=DEEPSEEK_MODEL)
 
 
+def _get_client_config(model: str):
+    """Return the correct OpenAI client and model name for the given selection."""
+    if model.startswith("deepseek"):
+        return OpenAI(
+            api_key=DEEPSEEK_API_KEY,
+            base_url=DEEPSEEK_BASE_URL,
+            timeout=120.0,
+            max_retries=3
+        ), model
+    elif model == "glm-4-flash":
+        return OpenAI(
+            api_key=GLM_API_KEY,
+            base_url=GLM_BASE_URL,
+            timeout=120.0,
+            max_retries=3
+        ), GLM_MODEL
+    return None, None
+
+
 def set_model(model: str) -> None:
-    """Set the DeepSeek model for the current request context."""
+    """Set the model for the current request context."""
     if model in AVAILABLE_MODELS:
         _model_var.set(model)
 
@@ -140,13 +156,16 @@ def _extract_json(s: str) -> dict:
 
 def llm_call(system: str, user: str, tool: dict) -> dict:
     """Single LLM call that enforces a specific function tool and returns parsed args."""
-    model = _model_var.get()
+    selection = _model_var.get()
+    
+    # Provider-specific fallbacks
+    if selection == "deepseek-reasoner":
+        print(f"⚠️ {selection} 不支持工具调用，已自动切换至 deepseek-chat 完成结构化任务")
+        selection = "deepseek-chat"
 
-    # DeepSeek R1 (reasoner) does not support tool calling in the official API.
-    # Fallback to deepseek-chat (V3) for structured tool-based tasks.
-    if model == "deepseek-reasoner":
-        print(f"⚠️ {model} 不支持工具调用，已自动切换至 deepseek-chat 完成结构化任务")
-        model = "deepseek-chat"
+    client, model = _get_client_config(selection)
+    if not client:
+        raise RuntimeError(f"Unsupported model selection: {selection}")
 
     retries = 2
     last_error = None
@@ -163,6 +182,7 @@ def llm_call(system: str, user: str, tool: dict) -> dict:
                 tools=[tool],
                 tool_choice={"type": "function", "function": {"name": tool["function"]["name"]}},
             )
+
             
             tool_calls = resp.choices[0].message.tool_calls
             if not tool_calls:

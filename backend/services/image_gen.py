@@ -56,10 +56,19 @@ def generate_cover_image(prompt: str, output_path: str) -> str:
 
 def generate_cover_prompt(scene_brief: str, asset_brief: str) -> str:
     """
-    Use DeepSeek to turn scene/asset descriptions into a high-quality image prompt.
+    Use the selected LLM to turn scene/asset descriptions into a high-quality image prompt.
     """
-    from backend.services.llm import client, get_model
+    from backend.services.llm import _get_client_config, get_model
     
+    selection = get_model()
+    # For cover prompts, if it's R1, we still fallback to V3 for speed/predictability
+    if selection == "deepseek-reasoner":
+        selection = "deepseek-chat"
+        
+    client, model = _get_client_config(selection)
+    if not client:
+        return f"Cinematic movie still, {scene_brief[:100]}"
+
     system = (
         "You are a cinematic concept artist. Your task is to create a highly detailed, "
         "professional AI image generation prompt for a movie cover. "
@@ -70,7 +79,7 @@ def generate_cover_prompt(scene_brief: str, asset_brief: str) -> str:
     
     try:
         resp = client.chat.completions.create(
-            model=get_model(),
+            model=model,
             messages=[
                 {"role": "system", "content": system},
                 {"role": "user", "content": user}
@@ -81,4 +90,5 @@ def generate_cover_prompt(scene_brief: str, asset_brief: str) -> str:
     except Exception as e:
         print(f"Error generating image prompt: {e}")
         return f"Cinematic movie still, {scene_brief[:100]}"
+
 

@@ -23,6 +23,11 @@ DEEPSEEK_API_KEY    = os.environ.get("DEEPSEEK_API_KEY", "")
 DEEPSEEK_BASE_URL   = "https://api.deepseek.com"
 DEEPSEEK_MODEL      = "deepseek-chat"
 
+GLM_API_KEY       = os.environ.get("GLM_API_KEY", "")
+GLM_BASE_URL      = "https://api.ark.cn/v1"
+GLM_MODEL         = "glm-4-flash"
+
+
 # Optional: free API keys for model search/download
 # Poly Pizza: register at https://poly.pizza  (free, no credit card)
 # Sketchfab:  register at https://sketchfab.com/settings#api (free)

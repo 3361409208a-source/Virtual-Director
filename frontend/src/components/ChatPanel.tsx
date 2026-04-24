@@ -2,7 +2,7 @@ import { useRef, useEffect } from 'react';
 import type { Message } from '../types';
 import { WorkflowLog } from './WorkflowLog';
 
-type Model = 'deepseek-chat' | 'deepseek-reasoner';
+type Model = 'deepseek-chat' | 'deepseek-reasoner' | 'glm-4-flash';
 
 interface Props {
   messages: Message[];
@@ -14,9 +14,10 @@ interface Props {
   onModelChange: (m: Model) => void;
 }
 
-const MODEL_LABELS: Record<Model, { short: string; desc: string }> = {
-  'deepseek-chat':     { short: 'V3',  desc: '快速 · 适合常规场景' },
-  'deepseek-reasoner': { short: 'R1',  desc: '深度推理 · 复杂场景更准确' },
+const MODEL_LABELS: Record<Model, { short: string; desc: string; name: string }> = {
+  'deepseek-chat':     { short: 'V3',  name: 'DeepSeek-V3', desc: '快速 · 适合常规场景' },
+  'deepseek-reasoner': { short: 'R1',  name: 'DeepSeek-R1', desc: '深度推理 · 复杂场景更准确' },
+  'glm-4-flash':       { short: 'GLM', name: 'GLM-4-Flash', desc: '模力方舟 · 智谱轻快模型' },
 };
 
 export function ChatPanel({ messages, input, isRendering, model, onInputChange, onSend, onModelChange }: Props) {
@@ -26,8 +27,11 @@ export function ChatPanel({ messages, input, isRendering, model, onInputChange, 
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const toggleModel = () =>
-    onModelChange(model === 'deepseek-chat' ? 'deepseek-reasoner' : 'deepseek-chat');
+  const toggleModel = () => {
+    const models: Model[] = ['deepseek-chat', 'deepseek-reasoner', 'glm-4-flash'];
+    const idx = models.indexOf(model);
+    onModelChange(models[(idx + 1) % models.length]);
+  };
 
   return (
     <div className="glass-panel chat-section">
@@ -53,14 +57,15 @@ export function ChatPanel({ messages, input, isRendering, model, onInputChange, 
 
       <div className="input-area">
         <button
-          className="model-toggle"
+          className={`model-toggle model-${model}`}
           onClick={toggleModel}
           disabled={isRendering}
           title={MODEL_LABELS[model].desc}
         >
           <span className="model-badge">{MODEL_LABELS[model].short}</span>
-          <span className="model-name">{model === 'deepseek-chat' ? 'DeepSeek-V3' : 'DeepSeek-R1'}</span>
+          <span className="model-name">{MODEL_LABELS[model].name}</span>
         </button>
+
         <input
           type="text"
           placeholder="输入导演意图..."
