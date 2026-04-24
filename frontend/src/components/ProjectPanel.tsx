@@ -29,17 +29,14 @@ export function ProjectPanel({ activeProjectId, onSelectProject }: Props) {
   }, []);
 
   useEffect(() => {
-    // Only poll the server if the panel is open OR if a project is actively generating
-    const hasGenerating = projects.some(p => p.status === 'generating');
-    let id: number | undefined;
-    
-    if (open || hasGenerating) {
-      id = window.setInterval(loadList, 5000);
+    // Whenever the user opens the panel, refresh the list.
+    // Removed the background setInterval polling entirely to avoid log spam 
+    // and infinite polling loops caused by crashed/zombie generating projects.
+    if (open) {
+      loadList();
     }
-    return () => {
-      if (id) window.clearInterval(id);
-    };
-  }, [open, projects]);
+  }, [open]);
+
 
 
   const openProject = async (pid: string) => {
