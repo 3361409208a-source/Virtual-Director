@@ -151,7 +151,17 @@ func _load_sequence(path: String) -> Dictionary:
 # Scene setup (sky / sun / fog / ground / props)
 # ──────────────────────────────────────────────
 
-func _setup_scene(s: Dictionary) -> void:
+func _setup_scene(s_var: Variant) -> void:
+	var s: Dictionary = {}
+	if typeof(s_var) == TYPE_STRING:
+		var json = JSON.new()
+		if json.parse(s_var) == OK and typeof(json.data) == TYPE_DICTIONARY:
+			s = json.data
+		else:
+			print("Failed to parse scene_setup string as JSON.")
+	elif typeof(s_var) == TYPE_DICTIONARY:
+		s = s_var
+
 	_setup_sky_and_env(s)
 	_setup_sun(s.get("sun", {}))
 	var ground_d = s.get("ground", {})
