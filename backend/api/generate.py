@@ -178,7 +178,7 @@ async def generate_video(req: PromptRequest):
 
             # ── Phase 4 & 5: Render ───────────────────────────────────────────
             if RENDERER == "blender":
-                m = "🎬 [渲染农场] Blender EEVEE 引擎渲染中..."
+                m = "🎬 [渲染农场] Blender Cycles CPU 渲染中（每帧约 2s）..."
                 _save("rendering", m)
                 yield _emit("rendering", m)
                 await asyncio.to_thread(do_blender, sequence, mp4_path)

@@ -20,6 +20,7 @@ export default function App() {
   const [videoUrl, setVideoUrl]       = useState<string | null>(null);
   const [sequence, setSequence]       = useState<SceneSequence | null>(null);
   const [model, setModel]             = useState<ModelSelection>('deepseek-v4-flash');
+  const [currentStep, setCurrentStep]  = useState<string>('');
 
   const [viewingProject, setViewingProject] = useState<{ id: string; videoUrl: string | null; sequence: SceneSequence | null } | null>(null);
 
@@ -47,13 +48,16 @@ export default function App() {
     try {
       await streamGenerate(input, event => {
         appendEntry(logId, { step: event.step, msg: event.msg, ts: Date.now() });
+        setCurrentStep(event.step);
         if (event.step === 'scene_preview' && event.sequence) {
           setSequence(event.sequence);
         } else if (event.step === 'done') {
           if (event.video_url) setVideoUrl(event.video_url);
           setIsRendering(false);
+          setCurrentStep('');
         } else if (event.step === 'error') {
           setIsRendering(false);
+          setCurrentStep('');
         }
       }, model);
     } catch (err: unknown) {
@@ -77,7 +81,7 @@ export default function App() {
         onSend={handleSend}
         onModelChange={setModel}
       />
-      <VideoPlayer videoUrl={viewingProject?.videoUrl ?? videoUrl} isRendering={isRendering} sequence={viewingProject?.sequence ?? sequence} />
+      <VideoPlayer videoUrl={viewingProject?.videoUrl ?? videoUrl} isRendering={isRendering} sequence={viewingProject?.sequence ?? sequence} currentStep={currentStep} />
       <ProjectPanel
         activeProjectId={viewingProject?.id ?? null}
         onSelectProject={(pid, seq) => {

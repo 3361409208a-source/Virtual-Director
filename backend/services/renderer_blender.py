@@ -92,13 +92,13 @@ def _build_and_render(sequence: dict, mp4_path: str) -> None:
     from mathutils import Vector, Euler
 
     meta     = sequence.get("meta", {})
-    fps      = int(meta.get("fps", 24))
+    fps      = min(int(meta.get("fps", 24)), 12)   # cap at 12fps — CYCLES CPU budget
     duration = float(meta.get("total_duration", 5.0))
     total_frames = int(duration * fps)
 
-    # ── 0. Reset scene ──────────────────────────────────────────────────────
-    bpy.ops.object.select_all(action="SELECT")
-    bpy.ops.object.delete(use_global=False)
+    # ── 0. Reset scene (data API — no context required) ───────────────────
+    for obj in list(bpy.data.objects):
+        bpy.data.objects.remove(obj, do_unlink=True)
     for blk in (bpy.data.meshes, bpy.data.materials,
                 bpy.data.lights, bpy.data.cameras):
         for item in list(blk):
@@ -109,15 +109,22 @@ def _build_and_render(sequence: dict, mp4_path: str) -> None:
     scene.frame_end   = total_frames
     scene.render.fps  = fps
 
-    # ── 1. Render settings ──────────────────────────────────────────────────
-    scene.render.engine = "BLENDER_EEVEE_NEXT" if bpy.app.version >= (4, 2, 0) else "BLENDER_EEVEE"
-    scene.render.resolution_x = 1152
-    scene.render.resolution_y = 648
-    scene.render.image_settings.file_format = "FFMPEG"
-    scene.render.ffmpeg.format = "MPEG4"
-    scene.render.ffmpeg.codec  = "H264"
-    scene.render.ffmpeg.constant_rate_factor = "MEDIUM"
-    scene.render.filepath = mp4_path
+    # ── 1. Render settings (CYCLES CPU — headless-safe) ────────────────────
+    scene.render.engine              = "CYCLES"
+    scene.cycles.device              = "CPU"
+    scene.cycles.samples             = 4           # OIDN denoiser compensates
+    scene.cycles.use_denoising       = True
+    scene.cycles.denoiser            = "OPENIMAGEDENOISE"
+    scene.render.use_persistent_data = True        # reuse BVH/shaders across frames
+    scene.render.resolution_x        = 960
+    scene.render.resolution_y        = 540
+    scene.render.image_settings.file_format = "PNG"
+    scene.render.image_settings.color_mode  = "RGB"
+    # Frames written here; ffmpeg assembles MP4 after render
+    frames_dir = mp4_path.replace(".mp4", "_frames")
+    os.makedirs(frames_dir, exist_ok=True)
+    # Blender appends frame number as 4-digit zero-padded (e.g. frame_0001.png)
+    scene.render.filepath = os.path.join(frames_dir, "frame_")
 
     # ── 2. World / sky ──────────────────────────────────────────────────────
     s_setup = sequence.get("scene_setup", {})
@@ -132,17 +139,27 @@ def _build_and_render(sequence: dict, mp4_path: str) -> None:
     hor_c   = _c(sky_d.get("horizon_color", {"r": 0.60, "g": 0.72, "b": 0.88}), 0.60, 0.72, 0.88)
 
     bg_node  = wnt.nodes.new("ShaderNodeBackground")
-    mix_node = wnt.nodes.new("ShaderNodeMixRGB")
-    grad     = wnt.nodes.new("ShaderNodeTexGradient")
-    coord    = wnt.nodes.new("ShaderNodeTexCoord")
     out_node = wnt.nodes.new("ShaderNodeOutputWorld")
-
+    # Sky gradient via Mix node (name changed in Blender 4.x)
+    try:
+        mix_node = wnt.nodes.new("ShaderNodeMixRGB")
+        mix_node.inputs["Color1"].default_value = hor_c
+        mix_node.inputs["Color2"].default_value = top_c
+        mix_fac_input  = mix_node.inputs["Fac"]
+        mix_color_out  = mix_node.outputs["Color"]
+    except Exception:
+        mix_node = wnt.nodes.new("ShaderNodeMix")
+        mix_node.data_type = "RGBA"
+        mix_node.inputs[6].default_value = hor_c
+        mix_node.inputs[7].default_value = top_c
+        mix_fac_input  = mix_node.inputs[0]
+        mix_color_out  = mix_node.outputs[2]
+    grad  = wnt.nodes.new("ShaderNodeTexGradient")
+    coord = wnt.nodes.new("ShaderNodeTexCoord")
     grad.gradient_type = "SPHERICAL"
-    wnt.links.new(coord.outputs["Generated"],  grad.inputs["Vector"])
-    wnt.links.new(grad.outputs["Color"],       mix_node.inputs["Fac"])
-    mix_node.inputs["Color1"].default_value = hor_c
-    mix_node.inputs["Color2"].default_value = top_c
-    wnt.links.new(mix_node.outputs["Color"],   bg_node.inputs["Color"])
+    wnt.links.new(coord.outputs["Generated"], grad.inputs["Vector"])
+    wnt.links.new(grad.outputs["Color"],      mix_fac_input)
+    wnt.links.new(mix_color_out,              bg_node.inputs["Color"])
     wnt.links.new(bg_node.outputs["Background"], out_node.inputs["Surface"])
 
     ambient_energy = max(float(s_setup.get("ambient_energy", 0.5)), 0.35)
@@ -174,10 +191,11 @@ def _build_and_render(sequence: dict, mp4_path: str) -> None:
     gnd_d = s_setup.get("ground", {})
     if gnd_d.get("enabled", True):
         size = float(gnd_d.get("size", 60.0))
-        bpy.ops.mesh.primitive_plane_add(size=size)
-        gnd = bpy.context.active_object
-        gnd.name = "Ground"
-        mat = _pbr_mat("GroundMat", gnd_d.get("color", {"r": 0.3, "g": 0.3, "b": 0.3}), roughness=1.0)
+        gnd_mesh = _make_plane_mesh("GroundMesh", size)
+        gnd = bpy.data.objects.new("Ground", gnd_mesh)
+        scene.collection.objects.link(gnd)
+        base_col = gnd_d.get("color", {"r": 0.3, "g": 0.3, "b": 0.3})
+        mat = _checker_ground_mat("GroundMat", base_col)
         gnd.data.materials.append(mat)
 
     # ── 6. Props ─────────────────────────────────────────────────────────────
@@ -237,10 +255,31 @@ def _build_and_render(sequence: dict, mp4_path: str) -> None:
         _bake_camera(cam_obj, cam_data, cam_track, baked_positions,
                      actor_objects, total_frames, fps, scene)
 
-    # ── 10. Render ───────────────────────────────────────────────────────────
-    print(f"[BlenderRenderer] Rendering {total_frames} frames @ {fps}fps -> {mp4_path}")
+    # ── 10. Render frames ────────────────────────────────────────────────────
+    print(f"[BlenderRenderer] Rendering {total_frames} frames @ {fps}fps -> {frames_dir}")
     bpy.ops.render.render(animation=True)
-    print("[BlenderRenderer] Done.")
+    print("[BlenderRenderer] Frames done. Assembling MP4 with ffmpeg…")
+
+    # ── 11. Assemble MP4 ─────────────────────────────────────────────────────
+    # Blender writes frame_0001.png … so start_number=1
+    frame_pattern = os.path.join(frames_dir, "frame_%04d.png")
+    cmd = [
+        "ffmpeg", "-y",
+        "-framerate", str(fps),
+        "-start_number", "1",
+        "-i", frame_pattern,
+        "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+        "-pix_fmt", "yuv420p",
+        mp4_path,
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"ffmpeg 合成失败:\n{result.stderr[-400:]}")
+    print(f"[BlenderRenderer] MP4 saved -> {mp4_path}")
+
+    # ── 12. Cleanup frames ───────────────────────────────────────────────────
+    import shutil
+    shutil.rmtree(frames_dir, ignore_errors=True)
 
 
 # ── Camera baking ─────────────────────────────────────────────────────────────
@@ -331,11 +370,23 @@ def _bake_camera(cam_obj, cam_data, cam_track, baked_pos, actor_objects,
             cam_obj.keyframe_insert("location",       frame=frame)
             cam_obj.keyframe_insert("rotation_euler", frame=frame)
 
-    # Smooth interpolation
-    if cam_obj.animation_data and cam_obj.animation_data.action:
-        for fc in cam_obj.animation_data.action.fcurves:
-            for kp in fc.keyframe_points:
-                kp.interpolation = "BEZIER"
+    # Smooth interpolation (non-critical — API changed in Blender 4.4+)
+    try:
+        action = cam_obj.animation_data.action if cam_obj.animation_data else None
+        if action:
+            fcurves = getattr(action, "fcurves", None)
+            if fcurves is None:
+                # Blender 4.4+ layered action: layers > strips > channelbag > fcurves
+                fcurves = []
+                for layer in getattr(action, "layers", []):
+                    for strip in getattr(layer, "strips", []):
+                        for cb in getattr(strip, "channelbags", []):
+                            fcurves.extend(getattr(cb, "fcurves", []))
+            for fc in (fcurves or []):
+                for kp in fc.keyframe_points:
+                    kp.interpolation = "BEZIER"
+    except Exception:
+        pass
 
 
 def _point_camera_at(cam_obj, target: "Vector"):
@@ -366,35 +417,87 @@ def _pbr_mat(name: str, color_dict: dict, roughness=0.6, metallic=0.0):
     return mat
 
 
+def _checker_ground_mat(name: str, color_dict: dict):
+    """Checkerboard ground material — provides visual motion reference."""
+    import bpy
+    mat = bpy.data.materials.new(name=name)
+    mat.use_nodes = True
+    nt = mat.node_tree
+    nt.nodes.clear()
+
+    bsdf     = nt.nodes.new("ShaderNodeBsdfPrincipled")
+    out      = nt.nodes.new("ShaderNodeOutputMaterial")
+    checker  = nt.nodes.new("ShaderNodeTexChecker")
+    mapping  = nt.nodes.new("ShaderNodeMapping")
+    coord    = nt.nodes.new("ShaderNodeTexCoord")
+
+    # 2-meter grid squares
+    mapping.inputs["Scale"].default_value = (0.5, 0.5, 0.5)
+    checker.inputs["Scale"].default_value = 1.0
+
+    # Checker colors: base color and a slightly darker version
+    r = float(color_dict.get("r", 0.3))
+    g = float(color_dict.get("g", 0.3))
+    b = float(color_dict.get("b", 0.3))
+    checker.inputs["Color1"].default_value = (r,       g,       b,       1.0)
+    checker.inputs["Color2"].default_value = (r * 0.6, g * 0.6, b * 0.6, 1.0)
+
+    nt.links.new(coord.outputs["Generated"],   mapping.inputs["Vector"])
+    nt.links.new(mapping.outputs["Vector"],    checker.inputs["Vector"])
+    nt.links.new(checker.outputs["Color"],     bsdf.inputs["Base Color"])
+    nt.links.new(bsdf.outputs["BSDF"],         out.inputs["Surface"])
+    bsdf.inputs["Roughness"].default_value = 1.0
+    return mat
+
+
+def _make_plane_mesh(name: str, size: float):
+    """Ground plane mesh via bmesh (no ops)."""
+    import bpy, bmesh
+    mesh = bpy.data.meshes.new(name)
+    bm   = bmesh.new()
+    bmesh.ops.create_grid(bm, x_segments=1, y_segments=1, size=size / 2.0)
+    bm.to_mesh(mesh)
+    bm.free()
+    return mesh
+
+
 def _add_primitive(shape: str, size_dict: dict, color_dict: dict,
                    pos_dict: dict, rot_dict: dict, name: str, scene):
-    import bpy
+    """Create mesh object via bmesh — no bpy.ops context required."""
+    import bpy, bmesh
     from mathutils import Vector, Euler
 
     sx = float(size_dict.get("x", 1.0))
     sy = float(size_dict.get("y", 1.0))
     sz = float(size_dict.get("z", 1.0))
 
-    if shape == "sphere":
-        bpy.ops.mesh.primitive_uv_sphere_add(radius=sx * 0.5, segments=32, ring_count=16)
-        obj = bpy.context.active_object
-        bpy.ops.object.shade_smooth()
-    elif shape == "cylinder":
-        bpy.ops.mesh.primitive_cylinder_add(radius=sx * 0.5, depth=sy)
-        obj = bpy.context.active_object
-        bpy.ops.object.shade_smooth()
-    else:
-        bpy.ops.mesh.primitive_cube_add()
-        obj = bpy.context.active_object
-        obj.scale = (sx * 0.5, sz * 0.5, sy * 0.5)
-        bpy.ops.object.transform_apply(scale=True)
+    mesh = bpy.data.meshes.new(name)
+    bm   = bmesh.new()
 
-    obj.name = name
+    if shape == "sphere":
+        bmesh.ops.create_uvsphere(bm, u_segments=32, v_segments=16, radius=sx * 0.5)
+        bm.to_mesh(mesh)
+        bm.free()
+        for poly in mesh.polygons:
+            poly.use_smooth = True
+    elif shape == "cylinder":
+        bmesh.ops.create_cone(bm, cap_ends=True, cap_tris=False,
+                              segments=16, radius1=sx * 0.5, radius2=sx * 0.5, depth=sy)
+        bm.to_mesh(mesh)
+        bm.free()
+        for poly in mesh.polygons:
+            poly.use_smooth = True
+    else:  # box
+        bmesh.ops.create_cube(bm, size=2.0)
+        bmesh.ops.scale(bm, vec=Vector((sx * 0.5, sz * 0.5, sy * 0.5)), verts=list(bm.verts))
+        bm.to_mesh(mesh)
+        bm.free()
+
+    obj = bpy.data.objects.new(name, mesh)
+    scene.collection.objects.link(obj)
+
     mat = _pbr_mat(f"mat_{name}", color_dict)
-    if obj.data.materials:
-        obj.data.materials[0] = mat
-    else:
-        obj.data.materials.append(mat)
+    mesh.materials.append(mat)
 
     obj.location       = Vector(_p(pos_dict))
     obj.rotation_euler = Euler(_r(rot_dict))
@@ -402,7 +505,6 @@ def _add_primitive(shape: str, size_dict: dict, color_dict: dict,
 
 
 def _spawn_primitive(pd: dict, scene, prefix="obj"):
-    import bpy
     name  = str(pd.get("id", f"{prefix}_{id(pd)}"))
     shape = str(pd.get("shape", "box"))
     return _add_primitive(
@@ -443,9 +545,6 @@ def _build_composite(parts: list, actor_id: str, scene) -> tuple:
 
         parent_obj = part_map.get(parent_name, root)
         obj.parent = parent_obj
-        # Clear parent-induced transform
-        if parent_obj is not root:
-            obj.matrix_parent_inverse = parent_obj.matrix_world.inverted()
 
         part_map[p_name] = obj
 
@@ -453,14 +552,9 @@ def _build_composite(parts: list, actor_id: str, scene) -> tuple:
 
 
 def _fallback_box(actor_id: str, scene) -> "bpy.types.Object":
-    import bpy
-    bpy.ops.mesh.primitive_cube_add()
-    obj = bpy.context.active_object
-    obj.name = actor_id
-    mat = _pbr_mat(f"mat_{actor_id}", {"r": 0.5, "g": 0.5, "b": 0.55})
-    obj.data.materials.append(mat)
-    scene.collection.objects.link(obj) if obj.name not in scene.collection.objects else None
-    return obj
+    return _add_primitive("box", {"x": 1, "y": 1, "z": 1},
+                          {"r": 0.5, "g": 0.5, "b": 0.55},
+                          {}, {}, actor_id, scene)
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
