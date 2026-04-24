@@ -148,6 +148,19 @@ async def generate_video(req: PromptRequest):
             _save("scene_preview", m)
             yield _emit("scene_preview", m, sequence=sequence)
 
+            # ── Phase 3.7: Generate Cover (SiliconFlow) ───────────────────────
+            cover_path = os.path.join(FRONTEND_PUBLIC_DIR, "cover.jpg")
+            m = "🎨 [视觉传达] 正在使用 Kolors 生成定制视频封面..."
+            _save("cover", m)
+            yield _emit("cover", m)
+            try:
+                from backend.services.image_gen import generate_cover_prompt, generate_cover_image
+                img_prompt = await asyncio.to_thread(generate_cover_prompt, director["scene_brief"], director["asset_brief"])
+                await asyncio.to_thread(generate_cover_image, img_prompt, cover_path)
+            except Exception as e:
+                print(f"Cover generation failed: {e}")
+                cover_path = None
+
             # ── Phase 4: Godot render ─────────────────────────────────────────
             m = "🎬 [渲染农场] Godot 引擎输出中..."
             _save("rendering", m)
@@ -158,10 +171,11 @@ async def generate_video(req: PromptRequest):
             yield _emit("rendering_done", m)
 
             # ── Phase 5: Convert ──────────────────────────────────────────────
-            m = "🔄 [输出压制] ffmpeg 封装母带..."
+            m = "🔄 [输出压制] ffmpeg 封装母带 (包含定制封面)..."
             _save("converting", m)
             yield _emit("converting", m)
-            await asyncio.to_thread(do_ffmpeg, avi_path, mp4_path)
+            await asyncio.to_thread(do_ffmpeg, avi_path, mp4_path, cover_path)
+
 
             m = "🎥 杀青！成片已送达右侧放映厅。"
             _save("done", m)

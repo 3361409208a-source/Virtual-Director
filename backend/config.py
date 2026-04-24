@@ -28,3 +28,8 @@ DEEPSEEK_MODEL      = "deepseek-chat"
 # Sketchfab:  register at https://sketchfab.com/settings#api (free)
 POLYPIZZA_API_KEY  = os.environ.get("POLYPIZZA_API_KEY",  "945e0cf46c8246a6bf4ecff940bc0c49")
 SKETCHFAB_API_KEY  = os.environ.get("SKETCHFAB_API_KEY",  "")
+
+SILICONFLOW_API_KEY  = os.environ.get("SILICONFLOW_API_KEY", "")
+SILICONFLOW_BASE_URL = "https://api.siliconflow.cn/v1"
+SILICONFLOW_IMAGE_MODEL = "Kwai-Kolors/Kolors"
+
