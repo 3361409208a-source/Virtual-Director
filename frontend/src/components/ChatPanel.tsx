@@ -61,11 +61,12 @@ export function ChatPanel({ messages, input, isRendering, model, onInputChange, 
           className={`model-toggle model-${model}`}
           onClick={toggleModel}
           disabled={isRendering}
-          title={MODEL_LABELS[model].desc}
+          title={MODEL_LABELS[model]?.desc || '选择模型'}
         >
-          <span className="model-badge">{MODEL_LABELS[model].short}</span>
-          <span className="model-name">{MODEL_LABELS[model].name}</span>
+          <span className="model-badge">{MODEL_LABELS[model]?.short || 'AI'}</span>
+          <span className="model-name">{MODEL_LABELS[model]?.name || model}</span>
         </button>
+
 
         <input
           type="text"

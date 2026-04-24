@@ -17,7 +17,8 @@ function App() {
   const [isRendering, setIsRendering] = useState(false);
   const [videoUrl, setVideoUrl]       = useState<string | null>(null);
   const [sequence, setSequence]       = useState<SceneSequence | null>(null);
-  const [model, setModel]             = useState<'deepseek-chat' | 'deepseek-reasoner'>('deepseek-chat');
+  const [model, setModel]             = useState<'deepseek-v4-flash' | 'deepseek-v4-pro' | 'glm-4-flash'>('deepseek-v4-flash');
+
   const [viewingProject, setViewingProject] = useState<{ id: string; videoUrl: string | null; sequence: SceneSequence | null } | null>(null);
 
   const appendEntry = (logId: string, entry: LogEntry) =>
