@@ -2,22 +2,24 @@ import { useRef, useEffect } from 'react';
 import type { Message } from '../types';
 import { WorkflowLog } from './WorkflowLog';
 
-type Model = 'deepseek-v4-flash' | 'deepseek-v4-pro' | 'glm-4-flash';
+import type { ModelSelection } from '../App';
 
 interface Props {
   messages: Message[];
   input: string;
   isRendering: boolean;
-  model: Model;
+  model: ModelSelection;
   onInputChange: (val: string) => void;
   onSend: () => void;
-  onModelChange: (m: Model) => void;
+  onModelChange: (m: ModelSelection) => void;
 }
 
-const MODEL_LABELS: Record<Model, { short: string; desc: string; name: string }> = {
-  'deepseek-v4-flash': { short: 'V4',  name: 'DeepSeek-V4-Flash', desc: '最新旗舰 · 极速生成' },
-  'deepseek-v4-pro':   { short: 'PRO', name: 'DeepSeek-V4-Pro',   desc: '深度思考 · 逻辑大师' },
-  'glm-4-flash':       { short: 'GLM', name: 'GLM-4-Flash',       desc: '模力方舟 · 智谱轻快模型' },
+const MODEL_LABELS: Record<ModelSelection, { short: string; desc: string; name: string }> = {
+  'deepseek-chat':     { short: 'V3',  name: 'DeepSeek V3 (经典)', desc: '快速 · 适合常规场景' },
+  'deepseek-reasoner': { short: 'R1',  name: 'DeepSeek R1 (经典)', desc: '深度推理 · 复杂场景更准确' },
+  'deepseek-v4-flash': { short: 'V4',  name: 'DeepSeek V4 Flash', desc: '最新旗舰 · 极速生成' },
+  'deepseek-v4-pro':   { short: 'PRO', name: 'DeepSeek V4 Pro',   desc: '深度思考 · 逻辑大师' },
+  'GLM-4.7-Flash':     { short: 'GLM', name: 'GLM-4.7-Flash',     desc: '模力方舟 · 智谱轻快模型' },
 };
 
 export function ChatPanel({ messages, input, isRendering, model, onInputChange, onSend, onModelChange }: Props) {
@@ -27,26 +29,31 @@ export function ChatPanel({ messages, input, isRendering, model, onInputChange, 
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const toggleModel = () => {
-    const models: Model[] = ['deepseek-v4-flash', 'deepseek-v4-pro', 'glm-4-flash'];
-    const idx = models.indexOf(model);
-    onModelChange(models[(idx + 1) % models.length]);
-  };
-
-
   return (
     <div className="glass-panel chat-section">
       <div className="header">
-        <h1>Virtual Director</h1>
-        <p>AI-Powered Godot Production</p>
+        <h2>🎬 导演意图分析</h2>
+        <div className="model-select-wrap">
+          <select 
+            className={`model-select model-${model}`}
+            value={model} 
+            onChange={(e) => onModelChange(e.target.value as ModelSelection)}
+            disabled={isRendering}
+            title={MODEL_LABELS[model]?.desc || '选择模型'}
+          >
+            {Object.entries(MODEL_LABELS).map(([key, info]) => (
+              <option key={key} value={key}>
+                {info.short} | {info.name}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <div className="chat-history">
-        {messages.map(msg =>
-          msg.type === 'log' ? (
-            <div key={msg.id} className="message ai">
-              <WorkflowLog entries={msg.entries ?? []} />
-            </div>
+        {messages.map((msg, i) =>
+          msg.type === 'workflow' ? (
+            <WorkflowLog key={msg.id} log={msg} />
           ) : (
             <div key={msg.id} className={`message ${msg.type}`}>
               {msg.text}
@@ -57,17 +64,6 @@ export function ChatPanel({ messages, input, isRendering, model, onInputChange, 
       </div>
 
       <div className="input-area">
-        <button
-          className={`model-toggle model-${model}`}
-          onClick={toggleModel}
-          disabled={isRendering}
-          title={MODEL_LABELS[model]?.desc || '选择模型'}
-        >
-          <span className="model-badge">{MODEL_LABELS[model]?.short || 'AI'}</span>
-          <span className="model-name">{MODEL_LABELS[model]?.name || model}</span>
-        </button>
-
-
         <input
           type="text"
           placeholder="输入导演意图..."

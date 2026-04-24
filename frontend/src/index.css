@@ -203,6 +203,73 @@ body {
   color: #15803d;
 }
 
+/* Model Select Dropdown */
+.model-select-wrap {
+  margin-left: auto;
+}
+
+.model-select {
+  appearance: none;
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 6px 30px 6px 12px;
+  font-size: 12px;
+  color: #e2e8f0;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.2s;
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%2394A3B8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+
+.model-select:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.model-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* DeepSeek V3 */
+.model-select.model-deepseek-chat {
+  border-color: #bae6fd;
+  color: #0369a1;
+  background-color: #f0f9ff;
+}
+
+/* DeepSeek R1 */
+.model-select.model-deepseek-reasoner {
+  border-color: #fbcfe8;
+  color: #be185d;
+  background-color: #fdf2f8;
+}
+
+/* DeepSeek V4 Flash */
+.model-select.model-deepseek-v4-flash {
+  border-color: #7dd3fc;
+  color: #0284c7;
+  background-color: #e0f2fe;
+}
+
+/* DeepSeek V4 Pro */
+.model-select.model-deepseek-v4-pro {
+  border-color: #f9a8d4;
+  color: #9d174d;
+  background-color: #fce7f3;
+}
+
+/* GLM 4.7 Flash */
+.model-select.model-GLM-4\.7-Flash {
+  border-color: #bbf7d0;
+  color: #15803d;
+  background-color: #f0fdf4;
+}
+
+
 .model-badge {
   font-size: 11px;
   font-weight: 700;

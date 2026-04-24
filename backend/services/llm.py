@@ -8,7 +8,11 @@ from backend.config import (
 
 
 # Providers and models
-AVAILABLE_MODELS = ["deepseek-v4-flash", "deepseek-v4-pro", "glm-4-flash"]
+AVAILABLE_MODELS = [
+    "deepseek-chat", "deepseek-reasoner",
+    "deepseek-v4-flash", "deepseek-v4-pro", 
+    "GLM-4.7-Flash"
+]
 
 # Per-request model override (safe for concurrent requests via asyncio context)
 _model_var: ContextVar[str] = ContextVar("deepseek_model", default="deepseek-v4-flash")
@@ -17,21 +21,15 @@ _model_var: ContextVar[str] = ContextVar("deepseek_model", default="deepseek-v4-
 
 def _get_client_config(selection: str):
     """Return the correct OpenAI client and model name for the given selection."""
-    # Map old IDs to new V4 IDs for backward compatibility (but leave deepseek-chat alone because V4 lacks tool support)
-    model_map = {
-        "deepseek-reasoner": "deepseek-v4-pro",
-    }
-    target_model = model_map.get(selection, selection)
-
-    if target_model.startswith("deepseek"):
+    if selection.startswith("deepseek"):
         return OpenAI(
             api_key=DEEPSEEK_API_KEY,
             base_url=DEEPSEEK_BASE_URL,
             timeout=120.0,
             max_retries=3
-        ), target_model
+        ), selection
 
-    elif target_model == "glm-4-flash":
+    elif selection == "GLM-4.7-Flash":
         return OpenAI(
             api_key=GLM_API_KEY,
             base_url=GLM_BASE_URL,
@@ -39,6 +37,7 @@ def _get_client_config(selection: str):
             max_retries=3
         ), GLM_MODEL
     return None, None
+
 
     return None, None
 

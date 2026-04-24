@@ -11,13 +11,15 @@ const WELCOME: Message = {
   text: '你好！我是练习时长两年半的个人 AI 导演助理。请告诉我你想要渲染什么画面？',
 };
 
-function App() {
+export type ModelSelection = 'deepseek-chat' | 'deepseek-reasoner' | 'deepseek-v4-flash' | 'deepseek-v4-pro' | 'GLM-4.7-Flash';
+
+export default function App() {
   const [messages, setMessages]       = useState<Message[]>([WELCOME]);
   const [input, setInput]             = useState('');
   const [isRendering, setIsRendering] = useState(false);
   const [videoUrl, setVideoUrl]       = useState<string | null>(null);
   const [sequence, setSequence]       = useState<SceneSequence | null>(null);
-  const [model, setModel]             = useState<'deepseek-v4-flash' | 'deepseek-v4-pro' | 'glm-4-flash'>('deepseek-v4-flash');
+  const [model, setModel]             = useState<ModelSelection>('deepseek-v4-flash');
 
   const [viewingProject, setViewingProject] = useState<{ id: string; videoUrl: string | null; sequence: SceneSequence | null } | null>(null);
 

@@ -155,10 +155,16 @@ async def generate_video(req: PromptRequest):
             yield _emit("cover", m)
             try:
                 from backend.services.image_gen import generate_cover_prompt, generate_cover_image
-                img_prompt = await asyncio.to_thread(generate_cover_prompt, director["scene_brief"], director["asset_brief"])
+                # Safely extract brief, fallback to original prompt to ensure relevance
+                scene_brief = director.get("scene_brief", meta.get("scene_brief", req.prompt))
+                asset_brief = director.get("actors_brief", meta.get("actors_brief", ""))
+                # Combine with original prompt for maximum context
+                combined_brief = f"Original Idea: {req.prompt}\nScene: {scene_brief}"
+                
+                img_prompt = await asyncio.to_thread(generate_cover_prompt, combined_brief, asset_brief)
                 await asyncio.to_thread(generate_cover_image, img_prompt, cover_path)
             except Exception as e:
-                print(f"Cover generation failed: {e}")
+                print(f"Cover gen failed: {e}")
                 cover_path = None
 
             # ── Phase 4: Godot render ─────────────────────────────────────────
