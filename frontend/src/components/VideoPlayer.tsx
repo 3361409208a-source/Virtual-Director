@@ -1,11 +1,8 @@
 import { useState, useEffect } from 'react';
-import type { SceneSequence } from '../types';
-import { ScenePreview } from './ScenePreview';
 
 interface Props {
   videoUrl: string | null;
   isRendering: boolean;
-  sequence: SceneSequence | null;
   currentStep: string;
   currentMsg: string;
 }
@@ -115,14 +112,12 @@ function RenderingOverlay({ step, msg }: { step: string; msg: string }) {
   );
 }
 
-export function VideoPlayer({ videoUrl, isRendering, sequence, currentStep, currentMsg }: Props) {
+export function VideoPlayer({ videoUrl, isRendering, currentStep, currentMsg }: Props) {
   return (
     <div className="glass-panel video-section">
       <div className="video-container">
         {videoUrl ? (
           <video src={videoUrl} controls autoPlay loop />
-        ) : isRendering && sequence ? (
-          <ScenePreview sequence={sequence} />
         ) : isRendering ? (
           <RenderingOverlay step={currentStep} msg={currentMsg} />
         ) : (

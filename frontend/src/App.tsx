@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Message, LogEntry, SceneSequence } from './types';
+import type { Message, LogEntry } from './types';
 import { streamGenerate, projectVideoUrl } from './services/api';
 import { ChatPanel } from './components/ChatPanel';
 import { VideoPlayer } from './components/VideoPlayer';
@@ -18,12 +18,11 @@ export default function App() {
   const [input, setInput]             = useState('');
   const [isRendering, setIsRendering] = useState(false);
   const [videoUrl, setVideoUrl]       = useState<string | null>(null);
-  const [sequence, setSequence]       = useState<SceneSequence | null>(null);
   const [model, setModel]             = useState<ModelSelection>('deepseek-v4-flash');
   const [currentStep, setCurrentStep]  = useState<string>('');
   const [currentMsg, setCurrentMsg]    = useState<string>('');
 
-  const [viewingProject, setViewingProject] = useState<{ id: string; videoUrl: string | null; sequence: SceneSequence | null } | null>(null);
+  const [viewingProject, setViewingProject] = useState<{ id: string; videoUrl: string | null } | null>(null);
 
   const appendEntry = (logId: string, entry: LogEntry) =>
     setMessages(prev => prev.map(m =>
@@ -56,7 +55,6 @@ export default function App() {
     setInput('');
     setIsRendering(true);
     setVideoUrl(null);
-    setSequence(null);
     setViewingProject(null);
 
     try {
@@ -68,9 +66,7 @@ export default function App() {
         }
         setCurrentStep(event.step);
         setCurrentMsg(event.msg);
-        if (event.step === 'scene_preview' && event.sequence) {
-          setSequence(event.sequence);
-        } else if (event.step === 'done') {
+        if (event.step === 'done') {
           if (event.video_url) setVideoUrl(event.video_url);
           setIsRendering(false);
           setCurrentStep('');
@@ -102,12 +98,12 @@ export default function App() {
         onSend={handleSend}
         onModelChange={setModel}
       />
-      <VideoPlayer videoUrl={viewingProject?.videoUrl ?? videoUrl} isRendering={isRendering} sequence={viewingProject?.sequence ?? sequence} currentStep={currentStep} currentMsg={currentMsg} />
+      <VideoPlayer videoUrl={viewingProject?.videoUrl ?? videoUrl} isRendering={isRendering} currentStep={currentStep} currentMsg={currentMsg} />
       <ProjectPanel
         activeProjectId={viewingProject?.id ?? null}
-        onSelectProject={(pid, seq) => {
+        onSelectProject={(pid) => {
           if (pid) {
-            setViewingProject({ id: pid, videoUrl: projectVideoUrl(pid), sequence: seq });
+            setViewingProject({ id: pid, videoUrl: projectVideoUrl(pid) });
           } else {
             setViewingProject(null);
           }
