@@ -187,8 +187,10 @@ func _setup_sky_and_env(s: Dictionary) -> void:
 	env.sky           = sky
 	env.background_mode = Environment.BG_SKY
 
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	env.ambient_light_energy = float(s.get("ambient_energy", 0.5))
+	# Use COLOR source so a dark/space sky doesn't kill ambient lighting.
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color  = Color(0.85, 0.88, 1.0)   # cool neutral fill
+	env.ambient_light_energy = max(float(s.get("ambient_energy", 0.5)), 0.35)
 
 	var fog_d = s.get("fog", {})
 	env.fog_enabled = bool(fog_d.get("enabled", false))

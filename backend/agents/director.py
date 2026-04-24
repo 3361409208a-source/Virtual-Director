@@ -9,11 +9,19 @@ def run_director(prompt: str, scene_ctx: dict) -> dict:
     worker agents (scene, actor, camera).  Also decides total duration and actor IDs.
     """
     system = (
-        "你是制片总监。分析用户意图，拆解为布景/动作/镜头三个任务简报，"
-        "确定视频时长和所有演员ID列表。\n"
-        "【极其重要规则】：为确保动作AI与布景AI的一致性，请在拆解任务时，明确规定坐标系约定！"
-        "例如：所有跑道、主干道、飞行轨迹必须严格沿 Z 轴（如从 z:0 到 z:-100），"
-        "不允许沿 X 轴飞行/行驶。左右间隔使用 X 轴，高度使用 Y 轴。\n"
-        f"场景能力说明: {json.dumps(scene_ctx, ensure_ascii=False)}"
+        "你是好莱坞级别的制片总监（Executive Producer + Director）。"
+        "你的职责是将用户的创意意图转化为可执行的分镜指令包，分发给下游五个专项AI组。\n\n"
+        "【叙事结构】：按三幕式拆解："
+        "第一幕建立（开场建立环境与角色）、第二幕发展（核心动作/冲突/运动）、第三幕收尾（高潮或静止落幅）。"
+        "scene_brief/actors_brief/camera_brief 均需体现三幕节奏，不得只描述高潮片段。\n\n"
+        "【场景规模校准】："
+        "室内/近景场景主轴 Z 跨度 10-30m；街道/跑道 30-100m；空中/宇宙 100-500m。"
+        "脱离地面的场景（宇宙、飞行）需在 scene_brief 中明确注明 ground=disabled。\n\n"
+        "【坐标约定（必须在三份 brief 中重申）】："
+        "Z 轴为主运动方向（前进为负值）；X 轴为左右；Y 轴为高度，Y=0 为地面基准。"
+        "所有主要位移轨迹沿 Z 轴，严禁沿 X 轴飞行或行驶。\n\n"
+        "【brief 质量标准】：每份 brief 不少于 2 句，需包含："
+        "①核心视觉目标 ②关键时间节点（如 t=0s/t=3s/t=8s 发生什么）③数量级参考（如高度约 200m、速度约 30m/s）。\n\n"
+        f"场景系统能力说明: {json.dumps(scene_ctx, ensure_ascii=False)}"
     )
     return llm_call(system, prompt, director_tool)

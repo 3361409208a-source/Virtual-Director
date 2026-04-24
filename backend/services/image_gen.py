@@ -54,29 +54,42 @@ def generate_cover_image(prompt: str, output_path: str) -> str:
         print(f"Error generating cover image: {e}")
         return ""
 
-def generate_cover_prompt(scene_brief: str, asset_brief: str) -> str:
+def generate_cover_prompt(user_prompt: str, scene_brief: str, asset_brief: str) -> str:
     """
-    Use the selected LLM to turn scene/asset descriptions into a high-quality image prompt.
+    Use the selected LLM to turn the user's original idea (plus scene/asset briefs) into a
+    high-quality Kolors image prompt. The user's prompt is the ground truth — the cover MUST
+    depict the main subject and action from it, not tangential side characters.
     """
     from backend.services.llm import _get_client_config, get_model
-    
+
+    fallback = f"Cinematic movie still of: {user_prompt}. Wide establishing shot, dramatic lighting, photorealistic."
+
     selection = get_model()
     # For cover prompts, if it's R1, we still fallback to V3 for speed/predictability
     if selection == "deepseek-reasoner":
         selection = "deepseek-chat"
-        
+
     client, model = _get_client_config(selection)
     if not client:
-        return f"Cinematic movie still, {scene_brief[:100]}"
+        return fallback
 
     system = (
-        "You are a cinematic concept artist. Your task is to create a highly detailed, "
-        "professional AI image generation prompt for a movie cover. "
-        "The prompt should be in English, focused on lighting, texture, and atmosphere. "
-        "Keep it concise but vivid. Focus on a single, striking composition."
+        "You are a cinematic concept artist writing a single English prompt for the Kolors "
+        "image model. The user's original idea is GROUND TRUTH: the cover MUST literally "
+        "depict its main subject and action (e.g. the vehicle, creature, or event named in "
+        "the idea), shot as a wide establishing / hero frame. Do NOT make the cover a "
+        "close-up portrait of an operator, pilot, driver, or any incidental human unless the "
+        "user explicitly asked for a person. Use the scene and asset briefs only to enrich "
+        "environment, lighting, texture, and mood. Output one concise vivid prompt, no lists, "
+        "no commentary."
     )
-    user = f"Scene Brief: {scene_brief}\nActors/Assets: {asset_brief}\nGenerate a Kolors image prompt."
-    
+    user = (
+        f"USER ORIGINAL IDEA (ground truth, must be depicted): {user_prompt}\n"
+        f"Scene brief (environment/mood only): {scene_brief}\n"
+        f"Assets/actors (supporting detail only, do not let a human take over the frame): {asset_brief}\n"
+        "Write the Kolors prompt now."
+    )
+
     try:
         resp = client.chat.completions.create(
             model=model,
@@ -84,11 +97,11 @@ def generate_cover_prompt(scene_brief: str, asset_brief: str) -> str:
                 {"role": "system", "content": system},
                 {"role": "user", "content": user}
             ],
-            max_tokens=150
+            max_tokens=200
         )
         return resp.choices[0].message.content.strip()
     except Exception as e:
         print(f"Error generating image prompt: {e}")
-        return f"Cinematic movie still, {scene_brief[:100]}"
+        return fallback
 
 

@@ -12,25 +12,25 @@ def run_physics_agent(prompt: str, director: dict) -> dict:
     duration = director["meta"]["total_duration"]
     brief    = director.get("physics_brief", "")
 
-    system = f"""你是专业的物理效果设计师。任务简报: {brief}
-演员ID列表: {actors}，视频时长: {duration}秒
-
-你的工作：决定哪些演员需要 Godot 刚体物理（碰撞/重力/弹跳），并设置初始条件。
-
-【规则】
-- Godot 物理引擎会自动计算轨迹，你只需提供初始速度和物理属性
-- rigid 体不需要关键帧动画，引擎自动处理
-- 如果演员只是走路/开车（已有关键帧），不需要 rigid，填 none 即可
-- 适合 rigid 的场景：被抛出的物体、碰撞后飞散的碎片、自由落体、滚动的球
-- 地面 Ground 已经是 StaticBody3D，rigid 体不会穿地
-
-【速度参考】
-- 步行: z方向 ±1.5 m/s
-- 跑步: z方向 ±4 m/s  
-- 汽车: z方向 ±10-20 m/s
-- 抛出: y方向 +5-10 m/s (向上) + 水平分量
-- 爆炸飞出: 各方向 ±5-20 m/s
-
-如果场景没有需要物理的对象，返回 physics_objects 为空列表。"""
+    system = (
+        "You are a senior VFX Dynamics TD (Technical Director). Respond in Chinese.\n\n"
+        f"Physics brief: {brief}\n"
+        f"Actor IDs: {actors}  |  Duration: {duration}s\n\n"
+        "Decision rule — use rigid body ONLY when Godot physics adds value over keyframes:\n"
+        "  YES: free-fall, rolling, explosion debris, bouncing objects, ragdoll-style impact scatter\n"
+        "  NO:  scripted walking, driving on a road, orbiting in space (use keyframes instead)\n\n"
+        "Physics parameter reference:\n"
+        "Mass table (kg):  human=70 | car=1200 | motorbike=200 | crate=30 | rock=500 | satellite=300\n"
+        "gravity_scale:  normal=1.0 | low-gravity/moon=0.17 | zero-g/space=0.0 | floaty=0.4\n"
+        "bounce (restitution): rubber=0.8 | wood=0.4 | metal=0.3 | concrete=0.1\n"
+        "friction: ice=0.05 | dirt=0.7 | rubber-on-asphalt=0.9\n\n"
+        "Initial velocity guidelines:\n"
+        "- Throw/launch upward: y: +6 to +12 m/s + horizontal component\n"
+        "- Explosion blast: all axes randomised +-8 to +-25 m/s depending on charge\n"
+        "- Car crash debris: dominant axis +-10-20, cross-axis +-3-8\n"
+        "- Gentle drop: y: -2 m/s (near-surface start)\n\n"
+        "Ground (StaticBody3D) is always present at Y=0 — rigid bodies won't fall through.\n"
+        "If no rigid physics is needed, return physics_objects as empty list."
+    )
 
     return llm_call(system, prompt, physics_tool)

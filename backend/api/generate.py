@@ -150,6 +150,12 @@ async def generate_video(req: PromptRequest):
 
             # ── Phase 3.7: Generate Cover (SiliconFlow) ───────────────────────
             cover_path = os.path.join(FRONTEND_PUBLIC_DIR, "cover.jpg")
+            # Wipe any stale cover from a previous run so we never reuse it silently.
+            if os.path.exists(cover_path):
+                try:
+                    os.remove(cover_path)
+                except OSError as e:
+                    print(f"Failed to remove stale cover: {e}")
             m = "🎨 [视觉传达] 正在使用 Kolors 生成定制视频封面..."
             _save("cover", m)
             yield _emit("cover", m)
@@ -158,11 +164,13 @@ async def generate_video(req: PromptRequest):
                 # Safely extract brief, fallback to original prompt to ensure relevance
                 scene_brief = director.get("scene_brief", meta.get("scene_brief", req.prompt))
                 asset_brief = director.get("actors_brief", meta.get("actors_brief", ""))
-                # Combine with original prompt for maximum context
-                combined_brief = f"Original Idea: {req.prompt}\nScene: {scene_brief}"
-                
-                img_prompt = await asyncio.to_thread(generate_cover_prompt, combined_brief, asset_brief)
-                await asyncio.to_thread(generate_cover_image, img_prompt, cover_path)
+
+                img_prompt = await asyncio.to_thread(
+                    generate_cover_prompt, req.prompt, scene_brief, asset_brief
+                )
+                saved = await asyncio.to_thread(generate_cover_image, img_prompt, cover_path)
+                if not saved or not os.path.exists(cover_path):
+                    cover_path = None
             except Exception as e:
                 print(f"Cover gen failed: {e}")
                 cover_path = None
