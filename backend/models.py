@@ -4,7 +4,8 @@ from typing import Literal
 
 class PromptRequest(BaseModel):
     prompt: str
-    model: Literal["deepseek-chat", "deepseek-reasoner"] = "deepseek-chat"
+    model: Literal["deepseek-chat", "deepseek-reasoner", "glm-4-flash"] = "deepseek-chat"
+
 
 
 class SSEEvent(BaseModel):
