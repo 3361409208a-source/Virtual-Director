@@ -17,9 +17,8 @@ _model_var: ContextVar[str] = ContextVar("deepseek_model", default="deepseek-v4-
 
 def _get_client_config(selection: str):
     """Return the correct OpenAI client and model name for the given selection."""
-    # Map old IDs to new V4 IDs for backward compatibility
+    # Map old IDs to new V4 IDs for backward compatibility (but leave deepseek-chat alone because V4 lacks tool support)
     model_map = {
-        "deepseek-chat": "deepseek-v4-flash",
         "deepseek-reasoner": "deepseek-v4-pro",
     }
     target_model = model_map.get(selection, selection)
@@ -31,6 +30,7 @@ def _get_client_config(selection: str):
             timeout=120.0,
             max_retries=3
         ), target_model
+
     elif target_model == "glm-4-flash":
         return OpenAI(
             api_key=GLM_API_KEY,
@@ -169,9 +169,12 @@ def llm_call(system: str, user: str, tool: dict) -> dict:
     selection = _model_var.get()
     
     # Provider-specific fallbacks
-    if selection in ["deepseek-reasoner", "deepseek-v4-pro"]:
-        print(f"⚠️ {selection} 不支持工具调用，已自动切换至 deepseek-v4-flash 完成结构化任务")
-        selection = "deepseek-v4-flash"
+    # NOTE: DeepSeek V4 API currently returns 400 errors for strict tool_choice on both flash and pro models.
+    # We MUST fallback to deepseek-chat for all structural agent tasks until they fix this.
+    if selection in ["deepseek-reasoner", "deepseek-v4-pro", "deepseek-v4-flash"]:
+        print(f"⚠️ {selection} 暂不支持强工具调用，已自动切换至 deepseek-chat 完成结构化任务")
+        selection = "deepseek-chat"
+
 
 
 
