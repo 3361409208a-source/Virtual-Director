@@ -523,22 +523,19 @@ func _build_animation(data: Dictionary) -> void:
 			_attach_map[cid] = pid
 
 	for actor_id in actor_tracks:
-		# Resolve node path — attached actors live under their parent node
-		var node_path: String
-		if _attach_map.has(actor_id):
-			var parent_id = _attach_map[actor_id]
-			node_path = parent_id + "/" + actor_id
-		else:
-			node_path = actor_id
+		var node_path = _get_recursive_node_path(actor_id)
+
 
 		if not has_node(NodePath(node_path)):
 			print("Warning: no node for actor track: ", node_path)
 			continue
 		var node = get_node(NodePath(node_path))
-		if node is RigidBody3D:
-			print("Skipping keyframes for physics body: ", actor_id)
-			continue  # physics engine controls this actor
-		_build_node_track(anim, node_path, actor_tracks[actor_id], false)
+		var skip_root = (node is RigidBody3D)
+		if skip_root:
+			print("Physics body detected: skipping root track but allowing sub-tracks for ", actor_id)
+		
+		_build_node_track(anim, node_path, actor_tracks[actor_id], false, skip_root)
+
 
 	var library: AnimationLibrary
 	if animation_player.has_animation_library(""):
@@ -548,12 +545,15 @@ func _build_animation(data: Dictionary) -> void:
 		animation_player.add_animation_library("", library)
 	library.add_animation("director_cut", anim)
 
-func _build_node_track(anim: Animation, node_path: String, track_data: Array, is_camera: bool) -> void:
-	var pos_idx = anim.add_track(Animation.TYPE_POSITION_3D)
-	anim.track_set_path(pos_idx, node_path + ":position")
-
-	var rot_idx = anim.add_track(Animation.TYPE_ROTATION_3D)
-	anim.track_set_path(rot_idx, node_path + ":quaternion")
+func _build_node_track(anim: Animation, node_path: String, track_data: Array, is_camera: bool, skip_root: bool = false) -> void:
+	var pos_idx = -1
+	var rot_idx = -1
+	
+	if not skip_root:
+		pos_idx = anim.add_track(Animation.TYPE_POSITION_3D)
+		anim.track_set_path(pos_idx, node_path + ":position")
+		rot_idx = anim.add_track(Animation.TYPE_ROTATION_3D)
+		anim.track_set_path(rot_idx, node_path + ":quaternion")
 
 	# Sub-track management: part_name -> {pos_idx, rot_idx}
 	var sub_indices: Dictionary = {}
@@ -571,27 +571,38 @@ func _build_node_track(anim: Animation, node_path: String, track_data: Array, is
 			pd = key.get("position", {"x":0,"y":0,"z":0})
 			rd = key.get("rotation", {"x":0,"y":0,"z":0})
 
-		anim.position_track_insert_key(pos_idx, time,
-			Vector3(float(pd.get("x",0)), float(pd.get("y",0)), float(pd.get("z",0))))
+		if not skip_root:
+			anim.position_track_insert_key(pos_idx, time,
+				Vector3(float(pd.get("x",0)), float(pd.get("y",0)), float(pd.get("z",0))))
 
-		var euler = Vector3(
-			deg_to_rad(float(rd.get("x",0))),
-			deg_to_rad(float(rd.get("y",0))),
-			deg_to_rad(float(rd.get("z",0))))
-		anim.rotation_track_insert_key(rot_idx, time, Quaternion.from_euler(euler))
+			var euler = Vector3(
+				deg_to_rad(float(rd.get("x",0))),
+				deg_to_rad(float(rd.get("y",0))),
+				deg_to_rad(float(rd.get("z",0))))
+			anim.rotation_track_insert_key(rot_idx, time, Quaternion.from_euler(euler))
 		
 		# Handle sub_tracks for composite parts
+
 		var sub_tracks = key.get("sub_tracks", {})
+		var actor_node = get_node(NodePath(node_path))
 		for part_name in sub_tracks:
 			if not sub_indices.has(part_name):
-				var p_path = node_path + "/" + part_name
+				var part_node = actor_node.find_child(part_name, true, false)
+				if part_node == null:
+					print("Warning: could not find part '", part_name, "' in actor '", node_path, "'")
+					continue
+				
+				var p_path = get_path_to(part_node)
 				var p_pos_idx = anim.add_track(Animation.TYPE_POSITION_3D)
-				anim.track_set_path(p_pos_idx, p_path + ":position")
+				anim.track_set_path(p_pos_idx, str(p_path) + ":position")
 				var p_rot_idx = anim.add_track(Animation.TYPE_ROTATION_3D)
-				anim.track_set_path(p_rot_idx, p_path + ":quaternion")
+				anim.track_set_path(p_rot_idx, str(p_path) + ":quaternion")
 				sub_indices[part_name] = {"pos": p_pos_idx, "rot": p_rot_idx}
 			
+			if not sub_indices.has(part_name): continue # Skip if part not found
+			
 			var sdata = sub_tracks[part_name]
+
 			var sp = sdata.get("position", {"x":0,"y":0,"z":0})
 			var sr = sdata.get("rotation", {"x":0,"y":0,"z":0})
 			
@@ -601,13 +612,19 @@ func _build_node_track(anim: Animation, node_path: String, track_data: Array, is
 			var seur = Vector3(deg_to_rad(float(sr.get("x",0))), deg_to_rad(float(sr.get("y",0))), deg_to_rad(float(sr.get("z",0))))
 			anim.rotation_track_insert_key(sub_indices[part_name].rot, time, Quaternion.from_euler(seur))
 
-	anim.track_set_interpolation_type(pos_idx, Animation.INTERPOLATION_CUBIC)
-	anim.track_set_interpolation_type(rot_idx, Animation.INTERPOLATION_CUBIC)
+	if not skip_root:
+		anim.track_set_interpolation_type(pos_idx, Animation.INTERPOLATION_CUBIC)
+		anim.track_set_interpolation_type(rot_idx, Animation.INTERPOLATION_CUBIC)
 	for part_name in sub_indices:
 		anim.track_set_interpolation_type(sub_indices[part_name].pos, Animation.INTERPOLATION_CUBIC)
 		anim.track_set_interpolation_type(sub_indices[part_name].rot, Animation.INTERPOLATION_CUBIC)
 
 
+func _get_recursive_node_path(id: String) -> String:
+	if _attach_map.has(id):
+		var pid = _attach_map[id]
+		return _get_recursive_node_path(pid) + "/" + id
+	return id
 func _on_animation_finished(_anim_name: String):
 	print("Cut! Animation finished. Rendering complete.")
 	get_tree().quit()
