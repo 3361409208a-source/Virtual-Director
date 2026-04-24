@@ -82,6 +82,18 @@ ACTOR_KEYFRAME: dict = {
                 "z": {"type": "number"},
             },
         },
+        "sub_tracks": {
+            "type": "object",
+            "description": "针对复合模型(composite)中特定部件(parts)的动画。Key为部件name，Value为该部件在当前时刻的局部变换。",
+            "additionalProperties": {
+                "type": "object",
+                "properties": {
+                    "position": VEC3,
+                    "rotation": VEC3,
+                },
+            },
+        },
     },
     "required": ["time", "position"],
 }
+

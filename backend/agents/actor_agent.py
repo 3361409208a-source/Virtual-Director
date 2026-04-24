@@ -20,7 +20,11 @@ def run_actor_agent(prompt: str, director: dict, scene_ctx: dict) -> dict:
         "  - person_1.local_offset = 该人相对飞机中心的偏移量（如 {x:0,y:1.2,z:-0.5}，即驾驶舱位置）\n"
         "  - person_1 的 actor_tracks 坐标系为相对 plane_1 的局部坐标，若人不移动则所有关键帧 position 为 {x:0,y:0,z:0}\n"
         "  - plane_1 的 actor_tracks 正常使用世界坐标规划飞行轨迹\n"
-        "附着的演员不需要重复规划与父演员相同的轨迹，只需规划自身在父演员上的相对动作（如挥手、坐下等）。"
+        "附着的演员不需要重复规划与父演员相同的轨迹，只需规划自身在父演员上的相对动作（如挥手、坐下等）。\n"
+        "【肢体/关节点动画】：对于复合模型(composite)，你可以通过 sub_tracks 字段控制其内部部件的旋转。\n"
+        "  - 例如在 keyframe 中设置 sub_tracks: {'arm_R': {'rotation': {'x': 90, 'y': 0, 'z': 0}}} 来让右臂抬起。\n"
+        "  - 结合 parent_name 层级，你可以实现走路、格斗、操纵杆等复杂动作。"
     )
     return llm_call(system, prompt, actor_tool)
+
 

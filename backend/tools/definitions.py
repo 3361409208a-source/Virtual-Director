@@ -244,14 +244,15 @@ asset_tool: dict = {
                                 "items": {
                                     "type": "object",
                                     "properties": {
-                                        "name": {"type": "string", "description": "部件名称"},
+                                        "name": {"type": "string", "description": "部件名称，用于动画控制"},
+                                        "parent_name": {"type": "string", "description": "父部件名称。如果设置了，该部件的位置将相对于父部件坐标系。用于构建关节点（如手臂挂在身体上）。"},
                                         "shape": {"type": "string", "enum": ["box", "sphere", "cylinder"]},
                                         "size": VEC3,
-                                        "position": {**VEC3, "description": "部件相对于物体中心的局部坐标"},
+                                        "position": {**VEC3, "description": "相对局部坐标"},
                                         "rotation": {**VEC3, "description": "欧拉角旋转（度）"},
                                         "color": COLOR3
                                     },
-                                    "required": ["shape", "size", "position", "color"]
+                                    "required": ["name", "shape", "size", "position", "color"]
                                 }
                             }
                         },

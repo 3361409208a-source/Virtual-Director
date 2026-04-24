@@ -334,8 +334,12 @@ func _create_actor_visual(id: String, type: String) -> Node3D:
 
 func _build_composite_actor(parts: Array) -> Node3D:
 	var root = Node3D.new()
+	var nodes: Dictionary = {"": root} # Map for parent resolution
+
+	# First pass: Create all nodes
 	for p in parts:
 		if typeof(p) != TYPE_DICTIONARY: continue
+		var p_name = str(p.get("name", "part_%d" % nodes.size()))
 		var shape = str(p.get("shape", "box"))
 		var size  = _v3(p.get("size", {"x":1,"y":1,"z":1}), 1, 1, 1)
 		var pos   = _v3(p.get("position", {"x":0,"y":0,"z":0}), 0, 0, 0)
@@ -343,12 +347,40 @@ func _build_composite_actor(parts: Array) -> Node3D:
 		var rot   = Vector3(float(rot_d.get("x",0)), float(rot_d.get("y",0)), float(rot_d.get("z",0)))
 		var col   = _c(p.get("color", {"r":0.8,"g":0.8,"b":0.8}), 0.8, 0.8, 0.8)
 		
+		var mi = MeshInstance3D.new()
+		mi.name = p_name
 		var mat = _make_mat(col)
+		mi.material_override = mat
+		
 		match shape:
-			"sphere":   _add_sphere(root, mat, size.x * 0.5, pos)
-			"cylinder": _add_cyl(root, mat, size.x * 0.5, size.y, pos, rot)
-			_:          _add_box(root, mat, size, pos, rot)
+			"sphere":
+				var sm = SphereMesh.new(); sm.radius = size.x * 0.5; sm.height = size.x
+				mi.mesh = sm
+			"cylinder":
+				var cm = CylinderMesh.new(); cm.top_radius = size.x * 0.5; cm.bottom_radius = size.x * 0.5; cm.height = size.y
+				mi.mesh = cm
+			_:
+				var bm = BoxMesh.new(); bm.size = size
+				mi.mesh = bm
+		
+		mi.position = pos
+		mi.rotation_degrees = rot
+		nodes[p_name] = mi
+
+	# Second pass: Link hierarchy
+	for p in parts:
+		var p_name = str(p.get("name", ""))
+		var parent_name = str(p.get("parent_name", ""))
+		if p_name == "": continue
+		var node = nodes[p_name]
+		var parent = nodes.get(parent_name, root)
+		if parent != node:
+			parent.add_child(node)
+		else:
+			root.add_child(node)
+			
 	return root
+
 
 # ── GLB Runtime Loader ────────────────────────────────────────────────────────
 
@@ -692,12 +724,15 @@ func _build_animation(data: Dictionary) -> void:
 		animation_player.add_animation_library("", library)
 	library.add_animation("director_cut", anim)
 
-func _build_node_track(anim: Animation, node_name: String, track_data: Array, is_camera: bool) -> void:
+func _build_node_track(anim: Animation, node_path: String, track_data: Array, is_camera: bool) -> void:
 	var pos_idx = anim.add_track(Animation.TYPE_POSITION_3D)
-	anim.track_set_path(pos_idx, node_name)
+	anim.track_set_path(pos_idx, node_path + ":position")
 
 	var rot_idx = anim.add_track(Animation.TYPE_ROTATION_3D)
-	anim.track_set_path(rot_idx, node_name)
+	anim.track_set_path(rot_idx, node_path + ":quaternion")
+
+	# Sub-track management: part_name -> {pos_idx, rot_idx}
+	var sub_indices: Dictionary = {}
 
 	for key in track_data:
 		var time = float(key.get("time", 0.0))
@@ -720,9 +755,34 @@ func _build_node_track(anim: Animation, node_name: String, track_data: Array, is
 			deg_to_rad(float(rd.get("y",0))),
 			deg_to_rad(float(rd.get("z",0))))
 		anim.rotation_track_insert_key(rot_idx, time, Quaternion.from_euler(euler))
+		
+		# Handle sub_tracks for composite parts
+		var sub_tracks = key.get("sub_tracks", {})
+		for part_name in sub_tracks:
+			if not sub_indices.has(part_name):
+				var p_path = node_path + "/" + part_name
+				var p_pos_idx = anim.add_track(Animation.TYPE_POSITION_3D)
+				anim.track_set_path(p_pos_idx, p_path + ":position")
+				var p_rot_idx = anim.add_track(Animation.TYPE_ROTATION_3D)
+				anim.track_set_path(p_rot_idx, p_path + ":quaternion")
+				sub_indices[part_name] = {"pos": p_pos_idx, "rot": p_rot_idx}
+			
+			var sdata = sub_tracks[part_name]
+			var sp = sdata.get("position", {"x":0,"y":0,"z":0})
+			var sr = sdata.get("rotation", {"x":0,"y":0,"z":0})
+			
+			anim.position_track_insert_key(sub_indices[part_name].pos, time,
+				Vector3(float(sp.get("x",0)), float(sp.get("y",0)), float(sp.get("z",0))))
+			
+			var seur = Vector3(deg_to_rad(float(sr.get("x",0))), deg_to_rad(float(sr.get("y",0))), deg_to_rad(float(sr.get("z",0))))
+			anim.rotation_track_insert_key(sub_indices[part_name].rot, time, Quaternion.from_euler(seur))
 
 	anim.track_set_interpolation_type(pos_idx, Animation.INTERPOLATION_CUBIC)
 	anim.track_set_interpolation_type(rot_idx, Animation.INTERPOLATION_CUBIC)
+	for part_name in sub_indices:
+		anim.track_set_interpolation_type(sub_indices[part_name].pos, Animation.INTERPOLATION_CUBIC)
+		anim.track_set_interpolation_type(sub_indices[part_name].rot, Animation.INTERPOLATION_CUBIC)
+
 
 func _on_animation_finished(_anim_name: String):
 	print("Cut! Animation finished. Rendering complete.")
