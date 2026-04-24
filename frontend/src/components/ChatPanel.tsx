@@ -52,8 +52,10 @@ export function ChatPanel({ messages, input, isRendering, model, onInputChange, 
 
       <div className="chat-history">
         {messages.map((msg, i) =>
-          msg.type === 'workflow' ? (
-            <WorkflowLog key={msg.id} log={msg} />
+          msg.type === 'log' ? (
+            <div key={msg.id} className="message ai">
+              <WorkflowLog entries={msg.entries ?? []} />
+            </div>
           ) : (
             <div key={msg.id} className={`message ${msg.type}`}>
               {msg.text}
