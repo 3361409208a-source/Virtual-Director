@@ -166,29 +166,30 @@ body {
   cursor: not-allowed;
 }
 
-/* DeepSeek V3 */
-.model-toggle.model-deepseek-chat {
+/* DeepSeek V4 Flash */
+.model-toggle.model-deepseek-v4-flash {
   background: #f0f9ff;
   border-color: #bae6fd;
 }
-.model-toggle.model-deepseek-chat .model-badge {
+.model-toggle.model-deepseek-v4-flash .model-badge {
   color: #0ea5e9;
 }
-.model-toggle.model-deepseek-chat .model-name {
+.model-toggle.model-deepseek-v4-flash .model-name {
   color: #0369a1;
 }
 
-/* DeepSeek R1 */
-.model-toggle.model-deepseek-reasoner {
+/* DeepSeek V4 Pro */
+.model-toggle.model-deepseek-v4-pro {
   background: #fdf2f8;
   border-color: #fbcfe8;
 }
-.model-toggle.model-deepseek-reasoner .model-badge {
+.model-toggle.model-deepseek-v4-pro .model-badge {
   color: #ec4899;
 }
-.model-toggle.model-deepseek-reasoner .model-name {
+.model-toggle.model-deepseek-v4-pro .model-name {
   color: #be185d;
 }
+
 
 /* GLM 4.7 Flash */
 .model-toggle.model-glm-4-flash {

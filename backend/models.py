@@ -4,7 +4,8 @@ from typing import Literal
 
 class PromptRequest(BaseModel):
     prompt: str
-    model: Literal["deepseek-chat", "deepseek-reasoner", "glm-4-flash"] = "deepseek-chat"
+    model: Literal["deepseek-v4-flash", "deepseek-v4-pro", "glm-4-flash"] = "deepseek-v4-flash"
+
 
 
 

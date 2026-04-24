@@ -2,7 +2,7 @@ import { useRef, useEffect } from 'react';
 import type { Message } from '../types';
 import { WorkflowLog } from './WorkflowLog';
 
-type Model = 'deepseek-chat' | 'deepseek-reasoner' | 'glm-4-flash';
+type Model = 'deepseek-v4-flash' | 'deepseek-v4-pro' | 'glm-4-flash';
 
 interface Props {
   messages: Message[];
@@ -15,9 +15,9 @@ interface Props {
 }
 
 const MODEL_LABELS: Record<Model, { short: string; desc: string; name: string }> = {
-  'deepseek-chat':     { short: 'V3',  name: 'DeepSeek-V3', desc: '快速 · 适合常规场景' },
-  'deepseek-reasoner': { short: 'R1',  name: 'DeepSeek-R1', desc: '深度推理 · 复杂场景更准确' },
-  'glm-4-flash':       { short: 'GLM', name: 'GLM-4-Flash', desc: '模力方舟 · 智谱轻快模型' },
+  'deepseek-v4-flash': { short: 'V4',  name: 'DeepSeek-V4-Flash', desc: '最新旗舰 · 极速生成' },
+  'deepseek-v4-pro':   { short: 'PRO', name: 'DeepSeek-V4-Pro',   desc: '深度思考 · 逻辑大师' },
+  'glm-4-flash':       { short: 'GLM', name: 'GLM-4-Flash',       desc: '模力方舟 · 智谱轻快模型' },
 };
 
 export function ChatPanel({ messages, input, isRendering, model, onInputChange, onSend, onModelChange }: Props) {
@@ -28,10 +28,11 @@ export function ChatPanel({ messages, input, isRendering, model, onInputChange, 
   }, [messages]);
 
   const toggleModel = () => {
-    const models: Model[] = ['deepseek-chat', 'deepseek-reasoner', 'glm-4-flash'];
+    const models: Model[] = ['deepseek-v4-flash', 'deepseek-v4-pro', 'glm-4-flash'];
     const idx = models.indexOf(model);
     onModelChange(models[(idx + 1) % models.length]);
   };
+
 
   return (
     <div className="glass-panel chat-section">

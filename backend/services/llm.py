@@ -8,10 +8,11 @@ from backend.config import (
 
 
 # Providers and models
-AVAILABLE_MODELS = ["deepseek-chat", "deepseek-reasoner", "glm-4-flash"]
+AVAILABLE_MODELS = ["deepseek-v4-flash", "deepseek-v4-pro", "glm-4-flash"]
 
 # Per-request model override (safe for concurrent requests via asyncio context)
-_model_var: ContextVar[str] = ContextVar("deepseek_model", default=DEEPSEEK_MODEL)
+_model_var: ContextVar[str] = ContextVar("deepseek_model", default="deepseek-v4-flash")
+
 
 
 def _get_client_config(model: str):
@@ -159,9 +160,10 @@ def llm_call(system: str, user: str, tool: dict) -> dict:
     selection = _model_var.get()
     
     # Provider-specific fallbacks
-    if selection == "deepseek-reasoner":
-        print(f"⚠️ {selection} 不支持工具调用，已自动切换至 deepseek-chat 完成结构化任务")
-        selection = "deepseek-chat"
+    if selection == "deepseek-v4-pro":
+        print(f"⚠️ {selection} 不支持工具调用，已自动切换至 deepseek-v4-flash 完成结构化任务")
+        selection = "deepseek-v4-flash"
+
 
     client, model = _get_client_config(selection)
     if not client:
