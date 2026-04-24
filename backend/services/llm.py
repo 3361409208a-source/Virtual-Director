@@ -28,31 +28,66 @@ def get_model() -> str:
 
 
 def _repair_json(s: str) -> str:
-    """Attempt to fix common LLM JSON errors like missing or extra closing brackets."""
+    """Attempt to fix common LLM JSON errors like missing or extra closing brackets or unquoted values."""
     s = s.strip()
     if not s:
         return s
     
-    # 1. Basic balancing: count { vs } and [ vs ]
-    # This is a naive approach but often works for trailing garbage or missing closings
+    # 1. Handle unquoted string values (common with some models)
+    # This regex looks for values after a colon that aren't quoted, aren't numbers, and aren't objects/arrays.
+    import re
+    # Match: ": <content>" where <content> doesn't start with " or [ or { or a number, and ends before , or }
+    # We use a non-greedy match and lookahead for , or }
+    def quote_val(match):
+        val = match.group(1).strip()
+        if val.lower() in ["true", "false", "null"]:
+            return f': {val}'
+        # If it's already quoted, don't double quote
+        if val.startswith('"') and val.endswith('"'):
+            return f': {val}'
+        # If it looks like a number, don't quote
+        try:
+            float(val)
+            return f': {val}'
+        except ValueError:
+            pass
+        # Escape existing quotes inside the new string and wrap in quotes
+        safe_val = val.replace('"', '\\"')
+        return f': "{safe_val}"'
+
+    s = re.sub(r':\s*([^"\[\{\d\-][^,\}]*)', quote_val, s)
+
+    # 2. Basic balancing: count { vs } and [ vs ]
     stack = []
     fixed_s = ""
+    in_string = False
+    escaped = False
+    
     for i, char in enumerate(s):
-        if char == '{' or char == '[':
-            stack.append('}' if char == '{' else ']')
-        elif char == '}' or char == ']':
-            if stack and stack[-1] == char:
-                stack.pop()
-            else:
-                # Mismatched or extra closing, skip it or handle it
-                continue
+        if char == '"' and not escaped:
+            in_string = not in_string
+        
+        if not in_string:
+            if char == '{' or char == '[':
+                stack.append('}' if char == '{' else ']')
+            elif char == '}' or char == ']':
+                if stack and stack[-1] == char:
+                    stack.pop()
+                else:
+                    continue
+        
         fixed_s += char
+        if char == '\\' and not escaped:
+            escaped = True
+        else:
+            escaped = False
     
     # Add missing closings
     while stack:
         fixed_s += stack.pop()
     
     return fixed_s
+
 
 
 def _extract_json(s: str) -> dict:
@@ -113,41 +148,54 @@ def llm_call(system: str, user: str, tool: dict) -> dict:
         print(f"⚠️ {model} 不支持工具调用，已自动切换至 deepseek-chat 完成结构化任务")
         model = "deepseek-chat"
 
-    try:
+    retries = 2
+    last_error = None
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user",   "content": user},
+    ]
 
-        resp = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user",   "content": user},
-            ],
-            tools=[tool],
-            tool_choice={"type": "function", "function": {"name": tool["function"]["name"]}},
-        )
-    except Exception as e:
-        error_msg = str(e)
-        if "Connection error" in error_msg or "APIConnectionError" in error_msg:
-            print(f"网络连接失败，请检查代理设置或 api.deepseek.com 的连通性。错误: {error_msg}")
-            raise RuntimeError(f"DeepSeek API 连接失败。如果您在境内，请确保开启了全局代理，或者尝试切换到 deepseek-chat 模型。详情: {error_msg}")
-        raise e
+    for attempt in range(retries + 1):
+        try:
+            resp = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                tools=[tool],
+                tool_choice={"type": "function", "function": {"name": tool["function"]["name"]}},
+            )
+            
+            tool_calls = resp.choices[0].message.tool_calls
+            if not tool_calls:
+                content = resp.choices[0].message.content
+                if content:
+                    try:
+                        return _extract_json(content)
+                    except Exception:
+                        pass
+                raise RuntimeError(f"LLM did not return a tool call. Content: {content}")
 
-    tool_calls = resp.choices[0].message.tool_calls
-
-    if not tool_calls:
-        # Fallback: some models might put JSON in content if tool_choice is ignored
-        content = resp.choices[0].message.content
-        if content:
+            args_str = tool_calls[0].function.arguments
             try:
-                return _extract_json(content)
-            except Exception:
-                pass
-        raise RuntimeError(f"LLM did not return a tool call. Content: {content}")
+                return _extract_json(args_str)
+            except Exception as e:
+                print(f"Attempt {attempt + 1} failed to parse JSON: {args_str[:200]}...")
+                last_error = e
+                # Add the error to conversation and retry
+                messages.append({"role": "assistant", "content": None, "tool_calls": tool_calls})
+                messages.append({
+                    "role": "tool", 
+                    "tool_call_id": tool_calls[0].id,
+                    "content": f"JSON解析失败: {str(e)}。请确保所有字符串字段都用双引号括起来，并且JSON格式严格正确。"
+                })
+                continue
+        except Exception as e:
+            if attempt == retries:
+                raise e
+            print(f"Attempt {attempt + 1} failed: {str(e)}")
+            last_error = e
+            continue
+            
+    raise last_error or RuntimeError("LLM call failed after retries")
 
-    args_str = tool_calls[0].function.arguments
-    try:
-        return _extract_json(args_str)
-    except Exception as e:
-        print(f"Failed to parse LLM response: {args_str}")
-        raise e
 
 
