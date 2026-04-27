@@ -358,13 +358,6 @@ export function ModelLibraryPanel() {
                         <button className="ai-regenerate-btn" onClick={handleAiGenerate} disabled={aiGenerating}>🔄 重新生成</button>
                       </div>
                     </div>
-                  ) : aiGenerating ? (
-                    <div className="ai-result">
-                      <div className="ai-result-viewer ai-result-viewer-loading">
-                        <span className="ai-spinner" style={{ width: 28, height: 28, borderWidth: 3 }} />
-                        <span style={{ marginTop: 10, fontSize: 13, color: '#8b949e' }}>AI 建模中…</span>
-                      </div>
-                    </div>
                   ) : (
                     <div className="ai-placeholder">
                       <div className="ai-placeholder-icon">✨</div>

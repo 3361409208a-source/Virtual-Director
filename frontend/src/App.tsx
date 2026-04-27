@@ -25,8 +25,6 @@ export default function App() {
   const [renderer, setRenderer]       = useState<RendererSelection>('godot');
   const [isTesting, setIsTesting]     = useState(false);
   const [testMsg, setTestMsg]         = useState('');
-  const [currentStep, setCurrentStep]  = useState<string>('');
-  const [currentMsg, setCurrentMsg]    = useState<string>('');
   const [streamLog, setStreamLog]      = useState<Record<string, unknown>[]>([]);
 
   const [viewingProject, setViewingProject] = useState<{ id: string; videoUrl: string | null } | null>(null);
@@ -72,8 +70,6 @@ export default function App() {
         } else if (event.step !== 'stream') {
           appendEntry(logId, { step: event.step, msg: event.msg, ts: Date.now() });
         }
-        setCurrentStep(event.step);
-        setCurrentMsg(event.msg);
         const raw = event as unknown as Record<string, unknown>;
         if (raw.step === 'stream') {
           flushSync(() => {
@@ -93,12 +89,8 @@ export default function App() {
         if (event.step === 'done') {
           if (event.video_url) setVideoUrl(event.video_url);
           setIsRendering(false);
-          setCurrentStep('');
-          setCurrentMsg('');
         } else if (event.step === 'error') {
           setIsRendering(false);
-          setCurrentStep('');
-          setCurrentMsg('');
         }
       }, model, renderer);
     } catch (err: unknown) {
@@ -145,7 +137,7 @@ export default function App() {
           }
         }}
       />
-      <VideoPlayer videoUrl={viewingProject?.videoUrl ?? videoUrl} isRendering={isRendering} currentStep={currentStep} currentMsg={currentMsg} streamLog={streamLog} />
+      <VideoPlayer videoUrl={viewingProject?.videoUrl ?? videoUrl} isRendering={isRendering} streamLog={streamLog} />
       <ProjectPanel
         activeProjectId={viewingProject?.id ?? null}
         onSelectProject={(pid) => {
