@@ -27,18 +27,22 @@ def list_models():
     for cat, dir_path in _CATEGORIES.items():
         if not os.path.isdir(dir_path):
             continue
-        for fname in sorted(os.listdir(dir_path)):
+        for fname in os.listdir(dir_path):
             if not fname.lower().endswith(".glb"):
                 continue
             full = os.path.join(dir_path, fname)
+            stat = os.stat(full)
             result.append({
                 "id":       f"{cat}/{fname}",
                 "category": cat,
                 "filename": fname,
                 "name":     os.path.splitext(fname)[0],
-                "size_kb":  os.path.getsize(full) // 1024,
+                "size_kb":  stat.st_size // 1024,
                 "url":      f"/api/models/{cat}/{fname}",
+                "mtime":    stat.st_mtime,
             })
+    # Sort newest first
+    result.sort(key=lambda m: m["mtime"], reverse=True)
     return {"models": result}
 
 
