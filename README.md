@@ -18,9 +18,7 @@ AI 多智能体协作 · Godot 4 实时渲染 · SSE 全链路实时反馈
 
 ## 🎥 演示视频
 
-> 点击下方图片下载 / 播放演示视频
-
-[![演示视频](yanshi.png)](https://github.com/3361409208a-source/Virtual-Director/raw/main/演示.mp4)
+https://github.com/user-attachments/assets/c765b1d2-898c-4d1e-ad57-4a9e02b1cc2f
 
 ## 📸 演示截图
 
