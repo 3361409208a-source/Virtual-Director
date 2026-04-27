@@ -12,6 +12,7 @@ const WELCOME: Message = {
 };
 
 export type ModelSelection = 'deepseek-chat' | 'deepseek-reasoner' | 'deepseek-v4-flash' | 'deepseek-v4-pro' | 'GLM-4.7-Flash';
+export type RendererSelection = 'godot' | 'blender';
 
 export default function App() {
   const [messages, setMessages]       = useState<Message[]>([WELCOME]);
@@ -19,6 +20,7 @@ export default function App() {
   const [isRendering, setIsRendering] = useState(false);
   const [videoUrl, setVideoUrl]       = useState<string | null>(null);
   const [model, setModel]             = useState<ModelSelection>('deepseek-v4-flash');
+  const [renderer, setRenderer]       = useState<RendererSelection>('godot');
   const [currentStep, setCurrentStep]  = useState<string>('');
   const [currentMsg, setCurrentMsg]    = useState<string>('');
 
@@ -76,7 +78,7 @@ export default function App() {
           setCurrentStep('');
           setCurrentMsg('');
         }
-      }, model);
+      }, model, renderer);
     } catch (err: unknown) {
       appendEntry(logId, {
         step: 'error',
@@ -94,9 +96,11 @@ export default function App() {
         input={input}
         isRendering={isRendering}
         model={model}
+        renderer={renderer}
         onInputChange={setInput}
         onSend={handleSend}
         onModelChange={setModel}
+        onRendererChange={setRenderer}
       />
       <VideoPlayer videoUrl={viewingProject?.videoUrl ?? videoUrl} isRendering={isRendering} currentStep={currentStep} currentMsg={currentMsg} />
       <ProjectPanel

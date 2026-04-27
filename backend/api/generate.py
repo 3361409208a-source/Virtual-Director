@@ -6,7 +6,7 @@ import time
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
-from backend.config import SEQUENCE_PATH, FRONTEND_PUBLIC_DIR, RENDERER
+from backend.config import SEQUENCE_PATH, FRONTEND_PUBLIC_DIR
 from backend.models import PromptRequest
 from backend.agents.director import run_director
 from backend.agents.scene_agent import run_scene_agent
@@ -180,7 +180,7 @@ async def generate_video(req: PromptRequest):
                 cover_path = None
 
             # ── Phase 4 & 5: Render ───────────────────────────────────────────
-            if RENDERER == "blender":
+            if req.renderer == "blender":
                 # Compute expected frame count for progress display
                 _meta = sequence.get("meta", {})
                 _total_f = int(float(_meta.get("total_duration", 5.0)) * min(int(_meta.get("fps", 24)), 12))

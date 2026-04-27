@@ -27,11 +27,12 @@ export async function streamGenerate(
   prompt: string,
   onEvent: (event: SSEEvent) => void,
   model: string = 'deepseek-chat',
+  renderer: 'godot' | 'blender' = 'godot',
 ): Promise<void> {
   const response = await fetch(`${API_BASE}/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, model }),
+    body: JSON.stringify({ prompt, model, renderer }),
   });
 
   if (!response.body) throw new Error('无响应流');

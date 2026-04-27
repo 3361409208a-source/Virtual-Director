@@ -2,16 +2,18 @@ import { useRef, useEffect } from 'react';
 import type { Message } from '../types';
 import { WorkflowLog } from './WorkflowLog';
 
-import type { ModelSelection } from '../App';
+import type { ModelSelection, RendererSelection } from '../App';
 
 interface Props {
   messages: Message[];
   input: string;
   isRendering: boolean;
   model: ModelSelection;
+  renderer: RendererSelection;
   onInputChange: (val: string) => void;
   onSend: () => void;
   onModelChange: (m: ModelSelection) => void;
+  onRendererChange: (r: RendererSelection) => void;
 }
 
 const MODEL_LABELS: Record<ModelSelection, { short: string; desc: string; name: string }> = {
@@ -22,7 +24,7 @@ const MODEL_LABELS: Record<ModelSelection, { short: string; desc: string; name: 
   'GLM-4.7-Flash':     { short: 'GLM', name: 'GLM-4.7-Flash',     desc: '模力方舟 · 智谱轻快模型' },
 };
 
-export function ChatPanel({ messages, input, isRendering, model, onInputChange, onSend, onModelChange }: Props) {
+export function ChatPanel({ messages, input, isRendering, model, renderer, onInputChange, onSend, onModelChange, onRendererChange }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -47,6 +49,20 @@ export function ChatPanel({ messages, input, isRendering, model, onInputChange, 
               </option>
             ))}
           </select>
+        </div>
+        <div className="renderer-toggle">
+          <button
+            className={`renderer-btn ${renderer === 'godot' ? 'active' : ''}`}
+            onClick={() => onRendererChange('godot')}
+            disabled={isRendering}
+            title="Godot 4 实时渲染"
+          >Godot</button>
+          <button
+            className={`renderer-btn ${renderer === 'blender' ? 'active' : ''}`}
+            onClick={() => onRendererChange('blender')}
+            disabled={isRendering}
+            title="Blender Cycles CPU 渲染"
+          >Blender</button>
         </div>
       </div>
 
