@@ -29,6 +29,7 @@ export function ModelLibraryPanel() {
   // AI modeling state
   const [aiPrompt, setAiPrompt]         = useState('');
   const [aiBaseModel, setAiBaseModel]   = useState<ModelMeta | null>(null);
+  const [aiLlm, setAiLlm]              = useState('deepseek-chat');
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiResult, setAiResult]         = useState<AIGenerateResult | null>(null);
   const [aiError, setAiError]           = useState('');
@@ -106,7 +107,7 @@ export function ModelLibraryPanel() {
             setAiLog(prev => [...prev, ev.msg]);
           }
         },
-        'deepseek-chat',
+        aiLlm,
         aiBaseModel?.name ?? '',
       );
     } catch (e) {
@@ -258,8 +259,28 @@ export function ModelLibraryPanel() {
                     </div>
                   )}
 
+                  {/* LLM selector */}
+                  <div className="ai-section-label">② 选择推理模型</div>
+                  <div className="ai-llm-selector">
+                    {[
+                      { id: 'deepseek-chat',      label: 'DeepSeek V3',    desc: '快速 · 推荐' },
+                      { id: 'deepseek-reasoner',  label: 'DeepSeek R1',    desc: '深度推理' },
+                      { id: 'GLM-4.7-Flash',      label: 'GLM-4.7 Flash',  desc: '极速' },
+                      { id: 'deepseek-v4-pro',    label: 'DeepSeek V4 Pro',desc: '最强' },
+                    ].map(m => (
+                      <button
+                        key={m.id}
+                        className={`ai-llm-btn ${aiLlm === m.id ? 'active' : ''}`}
+                        onClick={() => setAiLlm(m.id)}
+                      >
+                        <span className="ai-llm-name">{m.label}</span>
+                        <span className="ai-llm-desc">{m.desc}</span>
+                      </button>
+                    ))}
+                  </div>
+
                   {/* Prompt */}
-                  <div className="ai-section-label">② 描述你想要的模型</div>
+                  <div className="ai-section-label">③ 描述你想要的模型</div>
                   <div className="ai-model-examples">
                     {['一辆红色警车', '穿金甲的武士', '喷火的龙', '宇宙飞船', '篮球运动员'].map(ex => (
                       <button key={ex} className="ai-example-chip" onClick={() => setAiPrompt(ex)}>{ex}</button>

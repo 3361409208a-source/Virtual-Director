@@ -7,7 +7,7 @@ from fastapi import APIRouter, UploadFile, File, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from backend.config import GODOT_DIR
-from backend.services.llm import llm_call
+from backend.services.llm import llm_call, set_model
 from backend.tools.definitions import ai_model_tool
 from backend.services.glb_builder import build_glb
 
@@ -130,6 +130,7 @@ async def ai_generate_model(req: AIGenerateRequest):
 
             def run_llm():
                 try:
+                    set_model(req.model)
                     result_holder["r"] = llm_call(system, req.prompt, ai_model_tool, token_cb=token_cb)
                 except Exception as e:
                     err_holder["e"] = e
