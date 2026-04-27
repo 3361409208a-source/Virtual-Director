@@ -99,7 +99,10 @@ async def ai_generate_model(req: AIGenerateRequest):
     token_q: asyncio.Queue = asyncio.Queue()
 
     def token_cb(tok: str):
-        asyncio.run_coroutine_threadsafe(token_q.put(tok), loop)
+        asyncio.run_coroutine_threadsafe(token_q.put({"type": "content", "msg": tok}), loop)
+
+    def thinking_cb(tok: str):
+        asyncio.run_coroutine_threadsafe(token_q.put({"type": "thinking", "msg": tok}), loop)
 
     base_ctx = ""
     if req.base_model:
@@ -131,7 +134,7 @@ async def ai_generate_model(req: AIGenerateRequest):
             def run_llm():
                 try:
                     set_model(req.model)
-                    result_holder["r"] = llm_call(system, req.prompt, ai_model_tool, token_cb=token_cb)
+                    result_holder["r"] = llm_call(system, req.prompt, ai_model_tool, token_cb=token_cb, thinking_cb=thinking_cb)
                 except Exception as e:
                     err_holder["e"] = e
                 finally:
@@ -146,7 +149,13 @@ async def ai_generate_model(req: AIGenerateRequest):
                 tok = await token_q.get()
                 if tok is None:
                     break
-                yield _sse({"step": "token", "msg": tok})
+                if isinstance(tok, dict):
+                    if tok["type"] == "thinking":
+                        yield _sse({"step": "thinking", "msg": tok["msg"]})
+                    else:
+                        yield _sse({"step": "token", "msg": tok["msg"]})
+                else:
+                    yield _sse({"step": "token", "msg": tok})
 
             if "e" in err_holder:
                 yield _sse({"step": "error", "msg": f"LLM 调用失败: {err_holder['e']}"})

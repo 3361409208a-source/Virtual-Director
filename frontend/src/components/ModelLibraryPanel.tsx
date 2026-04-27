@@ -87,7 +87,20 @@ export function ModelLibraryPanel() {
       await streamAiGenerateModel(
         aiPrompt.trim(),
         (ev: AIModelEvent) => {
-          if (ev.step === 'token') {
+          if (ev.step === 'thinking') {
+            // Real-time thinking content from reasoning models (R1, etc.)
+            setAiLog(prev => {
+              const updated = [...prev];
+              const lastIdx = updated.length - 1;
+              if (lastIdx >= 0 && updated[lastIdx].startsWith('💭')) {
+                updated[lastIdx] = '💭 ' + ev.msg;
+              } else {
+                updated.push('💭 ' + ev.msg);
+              }
+              return updated;
+            });
+            setTimeout(() => logEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 30);
+          } else if (ev.step === 'token') {
             tokenBuf += ev.msg;
             setAiLog(prev => {
               const updated = [...prev];
@@ -351,7 +364,7 @@ export function ModelLibraryPanel() {
                       </div>
                       <div className="ai-log-body">
                         {aiLog.map((line, i) => (
-                          <div key={i} className={`ai-log-line ${line.startsWith('📝') ? 'thinking' : ''}`}>
+                          <div key={i} className={`ai-log-line ${(line.startsWith('📝') || line.startsWith('💭')) ? 'thinking' : ''}`}>
                             {line}
                           </div>
                         ))}

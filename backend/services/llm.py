@@ -174,10 +174,11 @@ def _extract_json(s: str) -> dict:
 
 
 
-def llm_call(system: str, user: str, tool: dict, token_cb=None) -> dict:
+def llm_call(system: str, user: str, tool: dict, token_cb=None, thinking_cb=None) -> dict:
     """Single LLM call that enforces a specific function tool and returns parsed args.
     
-    token_cb: optional callable(str) called with each streamed token delta.
+    token_cb: optional callable(str) called with each streamed token delta (normal content).
+    thinking_cb: optional callable(str) called with thinking/reasoning content.
     """
     selection = _model_var.get()
     
@@ -253,15 +254,58 @@ def llm_call(system: str, user: str, tool: dict, token_cb=None) -> dict:
                     stream=True,
                 )
                 args_str = ""
+                in_thinking = False
+                thinking_buf = ""
+                content_buf = ""
                 for chunk in stream:
                     delta = chunk.choices[0].delta if chunk.choices else None
                     if delta and delta.content:
-                        args_str += delta.content
-                        if token_cb:
-                            try:
-                                token_cb(delta.content)
-                            except Exception:
-                                pass
+                        text = delta.content
+                        args_str += text
+                        # Detect <thinking> and </thinking> tags for reasoning models
+                        if "<thinking>" in text:
+                            in_thinking = True
+                            # Send any accumulated content before <thinking>
+                            before = text.split("<thinking>")[0]
+                            if before and token_cb:
+                                try:
+                                    token_cb(before)
+                                except Exception:
+                                    pass
+                            thinking_buf = text.split("<thinking>", 1)[1]
+                            continue
+                        if "</thinking>" in text:
+                            in_thinking = False
+                            parts = text.split("</thinking>", 1)
+                            thinking_buf += parts[0]
+                            # Send accumulated thinking
+                            if thinking_cb and thinking_buf:
+                                try:
+                                    thinking_cb(thinking_buf)
+                                except Exception:
+                                    pass
+                            thinking_buf = ""
+                            # Send content after </thinking>
+                            if len(parts) > 1 and parts[1] and token_cb:
+                                try:
+                                    token_cb(parts[1])
+                                except Exception:
+                                    pass
+                            continue
+                        if in_thinking:
+                            thinking_buf += text
+                            # Stream thinking in real-time too
+                            if thinking_cb:
+                                try:
+                                    thinking_cb(text)
+                                except Exception:
+                                    pass
+                        else:
+                            if token_cb:
+                                try:
+                                    token_cb(text)
+                                except Exception:
+                                    pass
 
             try:
                 parsed = _extract_json(args_str)

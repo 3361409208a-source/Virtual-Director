@@ -71,7 +71,7 @@ export interface AIGenerateResult {
 }
 
 export interface AIModelEvent {
-  step: 'start' | 'token' | 'building' | 'done' | 'error';
+  step: 'start' | 'token' | 'thinking' | 'building' | 'done' | 'error';
   msg: string;
   filename?: string;
   model_name?: string;

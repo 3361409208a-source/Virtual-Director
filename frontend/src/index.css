@@ -1375,7 +1375,17 @@ video {
   font-family: 'Menlo', 'Consolas', monospace;
 }
 .ai-log-line { color: #c9d1d9; padding: 1px 0; }
-.ai-log-line.thinking { color: #8b949e; white-space: pre-wrap; word-break: break-word; }
+.ai-log-line.thinking {
+  color: #8b949e;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: rgba(255,255,255,0.02);
+  padding: 4px 8px;
+  border-radius: 4px;
+  margin: 2px -8px;
+  font-size: 11px;
+  line-height: 1.6;
+}
 
 /* Model selector */
 .ai-section-label { font-size: 11px; color: #6e7681; font-weight: 600; letter-spacing: 0.04em; margin-top: 4px; }
