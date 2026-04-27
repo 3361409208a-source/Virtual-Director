@@ -39,6 +39,9 @@ GLM_MODEL         = "GLM-4.7-Flash"
 POLYPIZZA_API_KEY  = os.environ.get("POLYPIZZA_API_KEY",  "")
 SKETCHFAB_API_KEY  = os.environ.get("SKETCHFAB_API_KEY",  "")
 
+# Enable/disable model search/download. If disabled, AI will always use composite modeling
+ENABLE_MODEL_SEARCH = os.environ.get("ENABLE_MODEL_SEARCH", "true").lower() == "true"
+
 SILICONFLOW_API_KEY  = os.environ.get("SILICONFLOW_API_KEY", "")
 SILICONFLOW_BASE_URL = "https://api.siliconflow.cn/v1"
 SILICONFLOW_IMAGE_MODEL = "Kwai-Kolors/Kolors"

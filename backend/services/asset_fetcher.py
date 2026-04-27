@@ -575,6 +575,13 @@ def fetch_model(actor_id: str, query: str, on_progress=None) -> str | None:
     `query` may be Chinese — it is normalised to English before any search.
     Progress messages are emitted via on_progress(msg) if provided.
     """
+    from backend.config import ENABLE_MODEL_SEARCH
+
+    # If model search is disabled, return None to force composite modeling
+    if not ENABLE_MODEL_SEARCH:
+        print(f"[AssetFetcher] Model search disabled, forcing composite for {actor_id}")
+        return None
+
     def _cb(msg: str):
         if on_progress:
             try:
