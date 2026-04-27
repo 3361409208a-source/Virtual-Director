@@ -6,6 +6,7 @@ import { ChatPanel } from './components/ChatPanel';
 import { VideoPlayer } from './components/VideoPlayer';
 import { ProjectPanel } from './components/ProjectPanel';
 import { ModelLibraryPanel } from './components/ModelLibraryPanel';
+import { DraftListPanel } from './components/DraftListPanel';
 
 const WELCOME: Message = {
   id: '0',
@@ -158,6 +159,7 @@ export default function App() {
         }}
       />
       <ModelLibraryPanel />
+      <DraftListPanel onSelectDraft={setViewingDraft} />
     </div>
   );
 }
