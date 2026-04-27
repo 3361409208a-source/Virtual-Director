@@ -195,3 +195,20 @@ export async function streamGenerate(
     }
   }
 }
+
+// ── Review (半自动审核) ──────────────────────────────────────────────────────
+
+/** 用户确认方案（同时提交最终 sequence） */
+export async function confirmReview(sid: string, sequence: object): Promise<void> {
+  const res = await fetch(`${API_BASE}/review/${sid}/confirm`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sequence }),
+  });
+  if (!res.ok) throw new Error('确认失败');
+}
+
+/** 用户取消方案 */
+export async function rejectReview(sid: string): Promise<void> {
+  await fetch(`${API_BASE}/review/${sid}/reject`, { method: 'POST' });
+}

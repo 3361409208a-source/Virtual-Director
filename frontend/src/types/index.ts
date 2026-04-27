@@ -31,6 +31,7 @@ export interface SceneSequence {
   actors: Array<{ actor_id: string; shape: string; color: number[] }>;
   actor_tracks: Record<string, ActorKeyframe[]>;
   camera_track: CameraKeyframe[];
+  asset_manifest?: Record<string, any>;
 }
 
 export interface ProjectMeta {
@@ -53,4 +54,5 @@ export interface SSEEvent {
   msg: string;
   video_url?: string;
   sequence?: SceneSequence;
+  review_sid?: string;
 }

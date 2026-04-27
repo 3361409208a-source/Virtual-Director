@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import time
+import uuid
 
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
@@ -20,6 +21,7 @@ from backend.services.llm import set_model
 from backend.services.project_store import (
     create_project, append_chat_entry, save_sequence, save_video, finalize_project
 )
+from backend.api.review import create_session, remove_session
 
 import json as _json
 
@@ -194,10 +196,37 @@ async def generate_video(req: PromptRequest):
             _save("merge_done", m)
             yield _emit("merge_done", m)
 
-            # ── Phase 3.5: Send scene preview to frontend ─────────────────────
-            m = "🗺️ 分镜预览已就绪"
+            # ── Phase 3.5: 发送分镜预览 + 等待用户审核 ──────────────────────
+            sid = uuid.uuid4().hex
+            sess = create_session(sid, sequence)
+            m = "🗺️ 分镜预览已就绪，等待导演审核..."
             _save("scene_preview", m)
-            yield _emit("scene_preview", m, sequence=sequence)
+            yield _emit("scene_preview", m, sequence=sequence, review_sid=sid)
+
+            # 挂起：等待用户在前端点击「确认」或「放弃」
+            m = "⏸️ [半自动] 等待导演审核分镜方案..."
+            _save("waiting_review", m)
+            yield _emit("waiting_review", m, review_sid=sid)
+
+            decision = await sess.wait(timeout=600.0)
+            # 用户可能已经修改了 sequence，把最新版本取回
+            sequence = sess.sequence
+            remove_session(sid)
+
+            if decision != "confirm":
+                m = "❌ 导演取消了本次方案，流程终止。"
+                _save("error", m)
+                yield _emit("error", m)
+                return
+
+            m = "✅ [半自动] 导演确认方案，开始渲染..."
+            _save("review_confirmed", m)
+            yield _emit("review_confirmed", m)
+
+            # 把（可能被修改过的）sequence 写回磁盘
+            with open(SEQUENCE_PATH, "w", encoding="utf-8") as f:
+                json.dump(sequence, f, ensure_ascii=False, indent=2)
+            save_sequence(pid, sequence)
 
             # ── Phase 3.7: Generate Cover (SiliconFlow) ───────────────────────
             cover_path = os.path.join(FRONTEND_PUBLIC_DIR, "cover.jpg")
