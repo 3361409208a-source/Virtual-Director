@@ -1408,6 +1408,35 @@ video {
 }
 .ai-base-selected span { color: #c9d1d9; }
 
+/* Model selector pagination */
+.ai-model-pager {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+.ai-pager-btn {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border-color);
+  color: #c9d1d9;
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s;
+}
+.ai-pager-btn:hover:not(:disabled) { background: rgba(255,255,255,0.1); }
+.ai-pager-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.ai-pager-info {
+  font-size: 11px;
+  color: #6e7681;
+}
+
 /* Placeholder */
 .ai-placeholder {
   flex: 1;

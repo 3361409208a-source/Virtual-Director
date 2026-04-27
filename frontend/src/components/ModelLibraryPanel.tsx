@@ -30,6 +30,8 @@ export function ModelLibraryPanel() {
   const [aiPrompt, setAiPrompt]         = useState('');
   const [aiBaseModel, setAiBaseModel]   = useState<ModelMeta | null>(null);
   const [aiLlm, setAiLlm]              = useState('deepseek-chat');
+  const [aiModelPage, setAiModelPage]   = useState(0);
+  const AI_PAGE_SIZE = 5;
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiResult, setAiResult]         = useState<AIGenerateResult | null>(null);
   const [aiError, setAiError]           = useState('');
@@ -241,15 +243,36 @@ export function ModelLibraryPanel() {
                       className={`ai-base-none ${!aiBaseModel ? 'selected' : ''}`}
                       onClick={() => setAiBaseModel(null)}
                     >不选择</button>
-                    {models.slice(0, 12).map(m => (
-                      <button
-                        key={m.id}
-                        className={`ai-base-chip ${aiBaseModel?.id === m.id ? 'selected' : ''}`}
-                        onClick={() => setAiBaseModel(aiBaseModel?.id === m.id ? null : m)}
-                        title={m.filename}
-                      >{m.name}</button>
-                    ))}
+                    {models
+                      .slice(aiModelPage * AI_PAGE_SIZE, (aiModelPage + 1) * AI_PAGE_SIZE)
+                      .map(m => (
+                        <button
+                          key={m.id}
+                          className={`ai-base-chip ${aiBaseModel?.id === m.id ? 'selected' : ''}`}
+                          onClick={() => setAiBaseModel(aiBaseModel?.id === m.id ? null : m)}
+                          title={m.filename}
+                        >{m.name}</button>
+                      ))}
                   </div>
+                  {/* Pagination */}
+                  {models.length > AI_PAGE_SIZE && (
+                    <div className="ai-model-pager">
+                      <button
+                        className="ai-pager-btn"
+                        onClick={() => setAiModelPage(p => Math.max(0, p - 1))}
+                        disabled={aiModelPage === 0}
+                      >‹</button>
+                      <span className="ai-pager-info">
+                        {aiModelPage * AI_PAGE_SIZE + 1}–{Math.min((aiModelPage + 1) * AI_PAGE_SIZE, models.length)}
+                        &nbsp;/&nbsp;{models.length}
+                      </span>
+                      <button
+                        className="ai-pager-btn"
+                        onClick={() => setAiModelPage(p => p + 1)}
+                        disabled={(aiModelPage + 1) * AI_PAGE_SIZE >= models.length}
+                      >›</button>
+                    </div>
+                  )}
                   {aiBaseModel && (
                     <div className="ai-base-selected">
                       参考：<span>{aiBaseModel.name}</span>
