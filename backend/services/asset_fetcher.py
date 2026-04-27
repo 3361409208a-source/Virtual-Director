@@ -554,6 +554,21 @@ def _try_fallback(actor_id: str, query: str, dest: str) -> tuple[bool, str]:
 # Public entry point
 # ───────────────────────────────────────────────
 
+def _find_exact_model(name_hint: str) -> str | None:
+    """Look for exact GLB filename match in custom → downloaded → builtin order."""
+    from backend.config import GODOT_ASSETS_DIR
+    candidates = [name_hint, name_hint.replace(" ", "_"), name_hint.replace("_", " ")]
+    for cand in set(candidates):
+        if not cand:
+            continue
+        fname = cand if cand.lower().endswith(".glb") else cand + ".glb"
+        for subdir in ("custom", "downloaded", "builtin"):
+            path = os.path.join(GODOT_ASSETS_DIR, subdir, fname)
+            if os.path.exists(path) and _is_valid_glb(path):
+                return path
+    return None
+
+
 def fetch_model(actor_id: str, query: str, on_progress=None) -> str | None:
     """
     Try Tier 0-3 to obtain a GLB for `query`. Returns local path or None.
@@ -581,7 +596,19 @@ def fetch_model(actor_id: str, query: str, on_progress=None) -> str | None:
         os.remove(dest)
         print(f"[AssetFetcher] 缓存文件损坏已删除: {dest}")
 
-    # —— Tier 0: Local builtin models (instant, no network) ——
+    # —— Tier -1: Exact filename match (e.g., pixel_colorful_dog → custom/pixel_colorful_dog.glb) ——
+    exact_path = _find_exact_model(query) or _find_exact_model(actor_id)
+    if exact_path:
+        import shutil
+        try:
+            shutil.copy2(exact_path, dest)
+            size_kb = os.path.getsize(dest) // 1024
+            _cb(f"✅ {actor_id}: 精确匹配本地模型 {os.path.basename(exact_path)} ({size_kb} KB)")
+            return dest
+        except Exception as e:
+            print(f"[AssetFetcher] exact match copy failed: {e}")
+
+    # —— Tier 0: Local builtin keyword catalog (instant, no network) ——
     _cb(f"🗄️ [Tier0] 检查内置模型库: {norm}")
     if _try_builtin(actor_id, norm, dest):
         size_kb = os.path.getsize(dest) // 1024

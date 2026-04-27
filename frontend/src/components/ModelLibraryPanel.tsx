@@ -381,8 +381,8 @@ export function ModelLibraryPanel() {
                         </div>
                         <div className="ai-result-hint">💡 拖动旋转 · 滚轮缩放</div>
                         <div className="ai-result-actions">
-                          <button className="ai-save-btn" onClick={() => { setAiResult(null); setAiPrompt(''); setTab('library'); setFilter('custom'); }}>
-                            ✅ 保留，切到库
+                          <button className="ai-save-btn" onClick={() => { setAiResult(null); setAiPrompt(''); setAiBaseModel(null); load(); }}>
+                            ✅ 保存到模型库
                           </button>
                           <button className="ai-delete-btn" onClick={handleAiDelete}>🗑 删除</button>
                         </div>
