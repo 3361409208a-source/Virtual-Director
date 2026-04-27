@@ -2,7 +2,6 @@ import { useRef, useEffect, useState } from 'react';
 import type { Message } from '../types';
 import { WorkflowLog } from './WorkflowLog';
 import { getConfig, updateConfig } from '../services/api';
-import { SceneDraftPanel } from './SceneDraftPanel';
 
 import type { ModelSelection, RendererSelection } from '../App';
 
@@ -14,14 +13,10 @@ interface Props {
   renderer: RendererSelection;
   isTesting: boolean;
   testMsg: string;
-  draftMode: boolean;
-  draftId: string | null;
   onInputChange: (val: string) => void;
   onSend: () => void;
   onModelChange: (m: ModelSelection) => void;
   onRendererChange: (r: RendererSelection) => void;
-  onDraftModeChange: (enabled: boolean) => void;
-  onDraftClose: () => void;
   onTestRender: (r: RendererSelection) => void;
 }
 
@@ -34,7 +29,7 @@ const MODEL_LABELS: Record<ModelSelection, { short: string; desc: string; name: 
   'astron-code-latest': { short: 'ASTR', name: 'Astron Code',       desc: '阿里云 Maas · 代码生成专家' },
 };
 
-export function ChatPanel({ messages, input, isRendering, model, renderer, isTesting, testMsg, draftMode, draftId, onInputChange, onSend, onModelChange, onRendererChange, onDraftModeChange, onDraftClose, onTestRender }: Props) {
+export function ChatPanel({ messages, input, isRendering, model, renderer, isTesting, testMsg, onInputChange, onSend, onModelChange, onRendererChange, onTestRender }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [enableModelSearch, setEnableModelSearch] = useState(true);
 
@@ -101,18 +96,6 @@ export function ChatPanel({ messages, input, isRendering, model, renderer, isTes
             <span className="toggle-label">{enableModelSearch ? '🔍 搜索模型' : '🧱 AI建模'}</span>
           </label>
         </div>
-        <div className="draft-mode-toggle">
-          <label className="toggle-switch">
-            <input
-              type="checkbox"
-              checked={draftMode}
-              onChange={(e) => onDraftModeChange(e.target.checked)}
-              disabled={isRendering}
-            />
-            <span className="toggle-slider"></span>
-            <span className="toggle-label">{draftMode ? '📝 草稿审核' : '🎬 直接渲染'}</span>
-          </label>
-        </div>
         <button
           className={`test-render-btn ${isTesting ? 'testing' : ''}`}
           onClick={() => onTestRender(renderer)}
@@ -138,18 +121,6 @@ export function ChatPanel({ messages, input, isRendering, model, renderer, isTes
         )}
         <div ref={bottomRef} />
       </div>
-
-      {draftId && (
-        <SceneDraftPanel
-          draftId={draftId}
-          onClose={onDraftClose}
-          onConfirm={(draft) => {
-            onDraftClose();
-            // TODO: Trigger rendering with confirmed draft
-            console.log('Draft confirmed:', draft);
-          }}
-        />
-      )}
 
       <div className="input-area">
         <input

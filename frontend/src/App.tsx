@@ -6,7 +6,6 @@ import { ChatPanel } from './components/ChatPanel';
 import { VideoPlayer } from './components/VideoPlayer';
 import { ProjectPanel } from './components/ProjectPanel';
 import { ModelLibraryPanel } from './components/ModelLibraryPanel';
-import { DraftListPanel } from './components/DraftListPanel';
 
 const WELCOME: Message = {
   id: '0',
@@ -29,8 +28,6 @@ export default function App() {
   const [streamLog, setStreamLog]      = useState<Record<string, unknown>[]>([]);
 
   const [viewingProject, setViewingProject] = useState<{ id: string; videoUrl: string | null } | null>(null);
-  const [viewingDraft, setViewingDraft] = useState<string | null>(null);
-  const [draftMode, setDraftMode] = useState(false);
 
   const appendEntry = (logId: string, entry: LogEntry) =>
     setMessages(prev => prev.map(m =>
@@ -91,14 +88,11 @@ export default function App() {
         }
         if (event.step === 'done') {
           if (event.video_url) setVideoUrl(event.video_url);
-          if ((event as unknown as Record<string, unknown>).draft_id) {
-            setViewingDraft((event as unknown as Record<string, unknown>).draft_id as string);
-          }
           setIsRendering(false);
         } else if (event.step === 'error') {
           setIsRendering(false);
         }
-      }, model, renderer, draftMode);
+      }, model, renderer);
     } catch (err: unknown) {
       appendEntry(logId, {
         step: 'error',
@@ -117,14 +111,10 @@ export default function App() {
         isRendering={isRendering}
         model={model}
         renderer={renderer}
-        draftMode={draftMode}
-        draftId={viewingDraft}
         onInputChange={setInput}
         onSend={handleSend}
         onModelChange={setModel}
         onRendererChange={setRenderer}
-        onDraftModeChange={setDraftMode}
-        onDraftClose={() => setViewingDraft(null)}
         isTesting={isTesting}
         testMsg={testMsg}
         onTestRender={async (r) => {
@@ -159,7 +149,6 @@ export default function App() {
         }}
       />
       <ModelLibraryPanel />
-      <DraftListPanel onSelectDraft={setViewingDraft} />
     </div>
   );
 }

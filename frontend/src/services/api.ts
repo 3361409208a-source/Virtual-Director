@@ -154,94 +154,6 @@ export async function updateConfig(config: Partial<Config>): Promise<Config> {
   return res.json();
 }
 
-// ── Scene Draft ─────────────────────────────────────────────────────────────
-
-export interface SceneDraft {
-  draft_id: string;
-  prompt: string;
-  status: 'draft' | 'approved' | 'rejected';
-  created_at: string;
-  updated_at: string;
-  scene: {
-    sky?: { top_color?: string; horizon_color?: string; bottom_color?: string };
-    sun?: { euler_degrees?: { x: number; y: number; z: number }; color?: string; energy: number };
-    ambient_energy?: number;
-    fog?: { enabled: boolean; density: number; color: string };
-    ground?: { color: string; size: number };
-  };
-  actors: Array<{
-    actor_id: string;
-    type: string;
-    model_source: string;
-    model_filename: string;
-    composite_data: object | null;
-    position: { x: number; y: number; z: number };
-    rotation: { x: number; y: number; z: number };
-    scale: { x: number; y: number; z: number };
-    actions: Array<{ frame: number; position: { x: number; y: number; z: number }; rotation: { x: number; y: number; z: number } }>;
-  }>;
-  cameras: Array<{
-    id: string;
-    position: { x: number; y: number; z: number };
-    rotation: { x: number; y: number; z: number };
-    fov: number;
-  }>;
-  user_notes: string;
-}
-
-export interface SceneDraftRequest {
-  prompt: string;
-  scene: object;
-  actors: object[];
-  cameras: object[];
-}
-
-export async function createSceneDraft(req: SceneDraftRequest): Promise<SceneDraft> {
-  const res = await fetch(`${API_BASE}/scene/draft`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(req),
-  });
-  if (!res.ok) throw new Error('创建场景草稿失败');
-  return res.json();
-}
-
-export async function getSceneDraft(draftId: string): Promise<SceneDraft> {
-  const res = await fetch(`${API_BASE}/scene/draft/${draftId}`);
-  if (!res.ok) throw new Error('获取场景草稿失败');
-  return res.json();
-}
-
-export async function listSceneDrafts(): Promise<SceneDraft[]> {
-  const res = await fetch(`${API_BASE}/scene/drafts`);
-  if (!res.ok) throw new Error('获取场景草稿列表失败');
-  const data = await res.json();
-  return data.drafts ?? [];
-}
-
-export async function updateSceneDraft(draftId: string, updates: Partial<SceneDraft>): Promise<SceneDraft> {
-  const res = await fetch(`${API_BASE}/scene/draft/${draftId}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(updates),
-  });
-  if (!res.ok) throw new Error('更新场景草稿失败');
-  return res.json();
-}
-
-export async function deleteSceneDraft(draftId: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/scene/draft/${draftId}`, { method: 'DELETE' });
-  if (!res.ok) throw new Error('删除场景草稿失败');
-}
-
-export async function confirmSceneDraft(draftId: string): Promise<SceneDraft> {
-  const res = await fetch(`${API_BASE}/scene/draft/${draftId}/confirm`, {
-    method: 'POST',
-  });
-  if (!res.ok) throw new Error('确认场景草稿失败');
-  return res.json();
-}
-
 /**
  * Stream the /api/generate SSE endpoint.
  * Calls onEvent for each parsed SSE frame until the stream closes.
@@ -251,12 +163,11 @@ export async function streamGenerate(
   onEvent: (event: SSEEvent) => void,
   model: string = 'deepseek-chat',
   renderer: 'godot' | 'blender' = 'godot',
-  draftMode: boolean = false,
 ): Promise<void> {
   const response = await fetch(`${API_BASE}/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, model, renderer, draft_mode: draftMode }),
+    body: JSON.stringify({ prompt, model, renderer }),
   });
 
   if (!response.body) throw new Error('无响应流');
