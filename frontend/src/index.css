@@ -1408,44 +1408,64 @@ video {
 }
 .ai-base-selected span { color: #c9d1d9; }
 
-/* Model selector pagination */
-.ai-model-pager {
+/* ── Unified pagination ─────────────────────────────────────────── */
+.ai-model-pager, .lib-pager {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 2px;
-}
-.ai-pager-btn {
-  background: rgba(255,255,255,0.04);
+  justify-content: center;
+  gap: 12px;
+  padding: 6px 14px;
+  background: rgba(255,255,255,0.02);
   border: 1px solid var(--border-color);
+  border-radius: 10px;
+  width: max-content;
+  margin: 6px auto 0;
+  flex-shrink: 0;
+}
+.lib-pager {
+  margin: 8px auto;
+  border-radius: 12px;
+  padding: 8px 18px;
+}
+
+.ai-pager-btn {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid #30363d;
   color: #c9d1d9;
-  border-radius: 4px;
-  width: 24px;
-  height: 24px;
-  font-size: 16px;
+  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  font-size: 18px;
   line-height: 1;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.12s;
+  transition: all 0.18s ease;
+  font-weight: 600;
 }
-.ai-pager-btn:hover:not(:disabled) { background: rgba(255,255,255,0.1); }
-.ai-pager-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-.ai-pager-info {
-  font-size: 11px;
-  color: #6e7681;
+.ai-pager-btn:hover:not(:disabled) {
+  background: rgba(56,139,253,0.12);
+  border-color: #388bfd66;
+  color: #58a6ff;
+  transform: scale(1.08);
+}
+.ai-pager-btn:active:not(:disabled) { transform: scale(0.96); }
+.ai-pager-btn:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+  transform: none;
+  border-color: #21262d;
 }
 
-/* Library pagination */
-.lib-pager {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 8px 0;
-  border-top: 1px solid var(--border-color);
-  flex-shrink: 0;
+.ai-pager-info {
+  font-size: 12px;
+  font-weight: 600;
+  color: #8b949e;
+  letter-spacing: 0.02em;
+  min-width: 90px;
+  text-align: center;
+  user-select: none;
 }
 
 /* Placeholder */
