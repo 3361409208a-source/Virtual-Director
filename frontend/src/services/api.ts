@@ -70,17 +70,43 @@ export interface AIGenerateResult {
   parts: object[];
 }
 
-export async function aiGenerateModel(prompt: string, model = 'deepseek-chat'): Promise<AIGenerateResult> {
+export interface AIModelEvent {
+  step: 'start' | 'token' | 'building' | 'done' | 'error';
+  msg: string;
+  filename?: string;
+  model_name?: string;
+  description?: string;
+  parts_count?: number;
+  size_kb?: number;
+  url?: string;
+}
+
+export async function streamAiGenerateModel(
+  prompt: string,
+  onEvent: (e: AIModelEvent) => void,
+  model = 'deepseek-chat',
+  baseModel = '',
+): Promise<void> {
   const res = await fetch(`${API_BASE}/models/ai-generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, model }),
+    body: JSON.stringify({ prompt, model, base_model: baseModel }),
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error((err as { detail?: string }).detail ?? '生成失败');
+  if (!res.body) throw new Error('无响应流');
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      try { onEvent(JSON.parse(line.slice(6)) as AIModelEvent); } catch { /* skip */ }
+    }
   }
-  return res.json();
 }
 
 export function modelFileUrl(category: string, filename: string): string {

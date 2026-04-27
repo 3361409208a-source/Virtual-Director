@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import type { ModelMeta, AIGenerateResult } from '../services/api';
-import { listModels, uploadModel, deleteCustomModel, aiGenerateModel } from '../services/api';
+import type { ModelMeta, AIGenerateResult, AIModelEvent } from '../services/api';
+import { listModels, uploadModel, deleteCustomModel, streamAiGenerateModel } from '../services/api';
 
 const CAT_LABEL: Record<string, string> = {
   builtin:    '内置',
@@ -28,9 +28,12 @@ export function ModelLibraryPanel() {
 
   // AI modeling state
   const [aiPrompt, setAiPrompt]         = useState('');
+  const [aiBaseModel, setAiBaseModel]   = useState<ModelMeta | null>(null);
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiResult, setAiResult]         = useState<AIGenerateResult | null>(null);
   const [aiError, setAiError]           = useState('');
+  const [aiLog, setAiLog]               = useState<string[]>([]);
+  const logEndRef                       = useRef<HTMLDivElement>(null);
 
   const load = async () => {
     setLoading(true);
@@ -73,11 +76,39 @@ export function ModelLibraryPanel() {
     setAiGenerating(true);
     setAiResult(null);
     setAiError('');
+    setAiLog([]);
     try {
-      const result = await aiGenerateModel(aiPrompt.trim());
-      setAiResult(result);
-      // Refresh model list to include the new file
-      await load();
+      let tokenBuf = '';
+      await streamAiGenerateModel(
+        aiPrompt.trim(),
+        (ev: AIModelEvent) => {
+          if (ev.step === 'token') {
+            tokenBuf += ev.msg;
+            setAiLog(prev => {
+              const updated = [...prev];
+              if (updated.length === 0 || updated[updated.length - 1].startsWith('📝')) {
+                updated[updated.length - 1] = '📝 ' + tokenBuf;
+              } else {
+                updated.push('📝 ' + tokenBuf);
+              }
+              return updated;
+            });
+            setTimeout(() => logEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 30);
+          } else if (ev.step === 'done') {
+            setAiResult(ev as unknown as AIGenerateResult);
+            setAiLog(prev => [...prev, ev.msg]);
+            load();
+          } else if (ev.step === 'error') {
+            setAiError(ev.msg);
+            setAiLog(prev => [...prev, '❌ ' + ev.msg]);
+          } else {
+            tokenBuf = '';
+            setAiLog(prev => [...prev, ev.msg]);
+          }
+        },
+        'deepseek-chat',
+        aiBaseModel?.name ?? '',
+      );
     } catch (e) {
       setAiError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -198,63 +229,115 @@ export function ModelLibraryPanel() {
             {/* ── AI 建模 tab ── */}
             {tab === 'ai' && (
               <div className="ai-model-tab">
+
+                {/* Left: selector + prompt */}
                 <div className="ai-model-input-area">
-                  <div className="ai-model-label">用自然语言描述你想要的 3D 模型</div>
+
+                  {/* Reference model selector */}
+                  <div className="ai-section-label">① 选择参考模型（可选）</div>
+                  <div className="ai-model-selector">
+                    <button
+                      className={`ai-base-none ${!aiBaseModel ? 'selected' : ''}`}
+                      onClick={() => setAiBaseModel(null)}
+                    >不选择</button>
+                    {models.slice(0, 12).map(m => (
+                      <button
+                        key={m.id}
+                        className={`ai-base-chip ${aiBaseModel?.id === m.id ? 'selected' : ''}`}
+                        onClick={() => setAiBaseModel(aiBaseModel?.id === m.id ? null : m)}
+                        title={m.filename}
+                      >{m.name}</button>
+                    ))}
+                  </div>
+                  {aiBaseModel && (
+                    <div className="ai-base-selected">
+                      参考：<span>{aiBaseModel.name}</span>
+                      <span className="model-cat-badge" style={{ background: CAT_COLOR[aiBaseModel.category] + '22', color: CAT_COLOR[aiBaseModel.category], marginLeft: 4 }}>
+                        {CAT_LABEL[aiBaseModel.category]}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Prompt */}
+                  <div className="ai-section-label">② 描述你想要的模型</div>
                   <div className="ai-model-examples">
-                    示例：&nbsp;
                     {['一辆红色警车', '穿金甲的武士', '喷火的龙', '宇宙飞船', '篮球运动员'].map(ex => (
                       <button key={ex} className="ai-example-chip" onClick={() => setAiPrompt(ex)}>{ex}</button>
                     ))}
                   </div>
                   <textarea
                     className="ai-model-textarea"
-                    placeholder="描述模型外观、颜色、风格..."
+                    placeholder="描述模型外观、颜色、风格…（Ctrl+Enter 生成）"
                     value={aiPrompt}
                     onChange={e => setAiPrompt(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleAiGenerate(); }}
                     rows={3}
                   />
                   <button className="ai-generate-btn" onClick={handleAiGenerate} disabled={aiGenerating || !aiPrompt.trim()}>
-                    {aiGenerating ? (
-                      <><span className="ai-spinner" /> AI 建模中，请稍候…</>
-                    ) : '✨ 生成模型'}
+                    {aiGenerating ? <><span className="ai-spinner" /> AI 建模中…</> : '✨ 生成模型'}
                   </button>
                   {aiError && <div className="ai-model-error">❌ {aiError}</div>}
                 </div>
 
-                {aiResult && (
-                  <div className="ai-result">
-                    <div className="ai-result-viewer">
-                      {/* @ts-ignore */}
-                      <model-viewer
-                        src={`http://localhost:8000${aiResult.url}?t=${Date.now()}`}
-                        auto-rotate camera-controls shadow-intensity="1" exposure="1"
-                        style={{ width: '100%', height: '100%' }}
-                      />
-                    </div>
-                    <div className="ai-result-info">
-                      <div className="ai-result-name">{aiResult.model_name}</div>
-                      <div className="ai-result-desc">{aiResult.description}</div>
-                      <div className="ai-result-meta">
-                        <span>{aiResult.parts_count} 个零件</span>
-                        <span>{aiResult.size_kb} KB</span>
-                        <span className="model-cat-badge" style={{ background: '#f0883e22', color: '#f0883e' }}>自定义</span>
+                {/* Right: reasoning log + preview */}
+                <div className="ai-model-right">
+                  {/* Reasoning log */}
+                  {(aiLog.length > 0 || aiGenerating) && (
+                    <div className="ai-log-panel">
+                      <div className="ai-log-title">
+                        {aiGenerating && <span className="ai-spinner" style={{ width: 10, height: 10, borderWidth: 1.5, marginRight: 6 }} />}
+                        推理过程
                       </div>
-                      <div className="ai-result-hint">💡 拖动旋转 · 滚轮缩放</div>
-                      <div className="ai-result-actions">
-                        <button className="ai-save-btn" onClick={() => { setAiResult(null); setAiPrompt(''); setTab('library'); setFilter('custom'); }}>
-                          ✅ 保留，切到库
-                        </button>
-                        <button className="ai-delete-btn" onClick={handleAiDelete}>
-                          🗑 删除
-                        </button>
+                      <div className="ai-log-body">
+                        {aiLog.map((line, i) => (
+                          <div key={i} className={`ai-log-line ${line.startsWith('📝') ? 'thinking' : ''}`}>
+                            {line}
+                          </div>
+                        ))}
+                        <div ref={logEndRef} />
                       </div>
-                      <button className="ai-regenerate-btn" onClick={handleAiGenerate} disabled={aiGenerating}>
-                        🔄 重新生成
-                      </button>
                     </div>
-                  </div>
-                )}
+                  )}
+
+                  {/* Result preview */}
+                  {aiResult && (
+                    <div className="ai-result">
+                      <div className="ai-result-viewer">
+                        {/* @ts-ignore */}
+                        <model-viewer
+                          src={`http://localhost:8000${aiResult.url}?t=${Date.now()}`}
+                          auto-rotate camera-controls shadow-intensity="1" exposure="1"
+                          style={{ width: '100%', height: '100%' }}
+                        />
+                      </div>
+                      <div className="ai-result-info">
+                        <div className="ai-result-name">{aiResult.model_name}</div>
+                        <div className="ai-result-desc">{aiResult.description}</div>
+                        <div className="ai-result-meta">
+                          <span>{aiResult.parts_count} 个零件</span>
+                          <span>{aiResult.size_kb} KB</span>
+                          <span className="model-cat-badge" style={{ background: '#f0883e22', color: '#f0883e' }}>自定义</span>
+                        </div>
+                        <div className="ai-result-hint">💡 拖动旋转 · 滚轮缩放</div>
+                        <div className="ai-result-actions">
+                          <button className="ai-save-btn" onClick={() => { setAiResult(null); setAiPrompt(''); setTab('library'); setFilter('custom'); }}>
+                            ✅ 保留，切到库
+                          </button>
+                          <button className="ai-delete-btn" onClick={handleAiDelete}>🗑 删除</button>
+                        </div>
+                        <button className="ai-regenerate-btn" onClick={handleAiGenerate} disabled={aiGenerating}>🔄 重新生成</button>
+                      </div>
+                    </div>
+                  )}
+
+                  {!aiResult && aiLog.length === 0 && (
+                    <div className="ai-placeholder">
+                      <div className="ai-placeholder-icon">✨</div>
+                      <div>选择参考模型，输入描述，点击生成</div>
+                      <div style={{ fontSize: 11, color: '#6e7681', marginTop: 4 }}>推理过程将实时显示在此区域</div>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>

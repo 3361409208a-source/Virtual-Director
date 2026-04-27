@@ -1329,3 +1329,94 @@ video {
 }
 .ai-regenerate-btn:hover:not(:disabled) { background: rgba(255,255,255,0.08); color: #c9d1d9; }
 .ai-regenerate-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* AI tab — right pane */
+.ai-model-right {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Reasoning log */
+.ai-log-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-bottom: 1px solid var(--border-color);
+}
+.ai-log-title {
+  padding: 8px 14px;
+  font-size: 11px;
+  color: #8b949e;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.ai-log-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 14px;
+  font-size: 12px;
+  line-height: 1.7;
+  font-family: 'Menlo', 'Consolas', monospace;
+}
+.ai-log-line { color: #c9d1d9; padding: 1px 0; }
+.ai-log-line.thinking { color: #8b949e; white-space: pre-wrap; word-break: break-word; }
+
+/* Model selector */
+.ai-section-label { font-size: 11px; color: #6e7681; font-weight: 600; letter-spacing: 0.04em; margin-top: 4px; }
+.ai-model-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  max-height: 110px;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+.ai-base-none, .ai-base-chip {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border-color);
+  color: #8b949e;
+  border-radius: 12px;
+  padding: 2px 9px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.12s;
+  white-space: nowrap;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ai-base-chip:hover, .ai-base-none:hover { background: rgba(255,255,255,0.08); color: #c9d1d9; }
+.ai-base-chip.selected, .ai-base-none.selected {
+  background: rgba(88,166,255,0.14);
+  border-color: #388bfd66;
+  color: #58a6ff;
+}
+.ai-base-selected {
+  font-size: 11px;
+  color: #6e7681;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 0;
+}
+.ai-base-selected span { color: #c9d1d9; }
+
+/* Placeholder */
+.ai-placeholder {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #6e7681;
+  font-size: 13px;
+  gap: 6px;
+}
+.ai-placeholder-icon { font-size: 36px; }
