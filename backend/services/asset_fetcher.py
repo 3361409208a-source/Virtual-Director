@@ -18,11 +18,108 @@ import urllib.request
 import urllib.parse
 import urllib.error
 
-from backend.config import ASSETS_DOWNLOADED_DIR, POLYPIZZA_API_KEY, SKETCHFAB_API_KEY
+from backend.config import ASSETS_DOWNLOADED_DIR, POLYPIZZA_API_KEY, SKETCHFAB_API_KEY, GODOT_DIR
 
 # Circuit-breaker: set True after first 401 so we never retry this session
 _polypizza_dead = False
 _sketchfab_dead  = False
+
+# ── Tier 0: Local builtin CC0 models (no network needed) ────────────────────
+_BUILTIN_DIR = os.path.join(GODOT_DIR, "assets", "builtin")
+
+# keyword → builtin filename   (longest/most-specific first)
+_BUILTIN_CATALOG: list[tuple[str, str]] = [
+    # Characters
+    ("human",       "human.glb"),
+    ("person",      "human.glb"),
+    ("man",         "human.glb"),
+    ("woman",       "human.glb"),
+    ("character",   "human.glb"),
+    ("pedestrian",  "human.glb"),
+    ("soldier",     "human.glb"),
+    ("pilot",       "human.glb"),
+    ("player",      "human.glb"),
+    ("basketball player", "human.glb"),
+    ("basketball",  "ball.glb"),
+    ("robot",       "robot.glb"),
+    ("android",     "robot.glb"),
+    ("alien",       "robot.glb"),
+    # Vehicles
+    ("police car",  "car.glb"),
+    ("ambulance",   "car.glb"),
+    ("sports car",  "car.glb"),
+    ("race car",    "car.glb"),
+    ("car",         "car.glb"),
+    ("truck",       "car.glb"),
+    ("bus",         "car.glb"),
+    ("van",         "car.glb"),
+    ("vehicle",     "car.glb"),
+    # Aircraft / Space
+    ("airplane",    "airplane.glb"),
+    ("plane",       "airplane.glb"),
+    ("jet",         "airplane.glb"),
+    ("aircraft",    "airplane.glb"),
+    ("rocket",      "airplane.glb"),
+    ("spaceship",   "airplane.glb"),
+    ("spacecraft",  "airplane.glb"),
+    ("ufo",         "airplane.glb"),
+    ("saucer",      "airplane.glb"),
+    # Animals
+    ("fox",         "fox.glb"),
+    ("wolf",        "fox.glb"),
+    ("dog",         "fox.glb"),
+    ("cat",         "fox.glb"),
+    ("animal",      "fox.glb"),
+    ("bear",        "fox.glb"),
+    ("duck",        "duck.glb"),
+    ("bird",        "duck.glb"),
+    ("chicken",     "duck.glb"),
+    ("penguin",     "duck.glb"),
+    # Fantasy
+    ("dragon",      "dragon.glb"),
+    ("dinosaur",    "dragon.glb"),
+    ("wyvern",      "dragon.glb"),
+    ("skull",       "skull.glb"),
+    ("skeleton",    "skull.glb"),
+    # Props
+    ("lantern",     "lantern.glb"),
+    ("lamp",        "lantern.glb"),
+    ("torch",       "lantern.glb"),
+    ("helmet",      "helmet.glb"),
+    ("armor",       "helmet.glb"),
+    ("bottle",      "bottle.glb"),
+    ("container",   "bottle.glb"),
+    ("ball",        "ball.glb"),
+    ("cube",        "ball.glb"),
+    ("block",       "ball.glb"),
+    ("avocado",     "avocado.glb"),
+    ("fruit",       "avocado.glb"),
+    ("food",        "avocado.glb"),
+    ("plant",       "avocado.glb"),
+    ("tree",        "avocado.glb"),
+]
+
+def _try_builtin(actor_id: str, query: str, dest: str) -> bool:
+    """Tier 0: match query against local bundled models. Copy to dest if found."""
+    q = query.lower().strip()
+    # longest match first (catalog is ordered most-specific first)
+    matched_file = None
+    for keyword, fname in _BUILTIN_CATALOG:
+        if keyword in q:
+            full = os.path.join(_BUILTIN_DIR, fname)
+            if os.path.exists(full):
+                matched_file = full
+                print(f"[Tier0/Builtin] '{query}' → {fname}")
+                break
+    if not matched_file:
+        return False
+    import shutil
+    try:
+        shutil.copy2(matched_file, dest)
+        return True
+    except Exception as e:
+        print(f"[Tier0/Builtin] copy failed: {e}")
+        return False
 
 _UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -264,6 +361,13 @@ def fetch_model(actor_id: str, query: str, on_progress=None) -> str | None:
     dest = _dest_path(actor_id, query)
     if os.path.exists(dest):
         _cb(f"📦 {actor_id}: 使用缓存模型")
+        return dest
+
+    # —— Tier 0: Local builtin models (instant, no network) ——
+    _cb(f"🗄️ [Tier0] 检查内置模型库: {query}")
+    if _try_builtin(actor_id, query, dest):
+        size_kb = os.path.getsize(dest) // 1024
+        _cb(f"✅ {actor_id}: 内置模型匹配成功 ({size_kb} KB)")
         return dest
 
     # —— Tier 1: Poly Pizza ——
