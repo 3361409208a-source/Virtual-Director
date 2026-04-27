@@ -91,7 +91,13 @@ def _build_and_render(sequence: dict, mp4_path: str, progress_cb=None) -> None:
     import bpy                       # noqa: imported inside so outer code can still load the module
     from mathutils import Vector, Euler
 
-    meta     = sequence.get("meta", {})
+    import json as _json2
+    def _pf(v, t=dict):
+        if isinstance(v, str):
+            try: v = _json2.loads(v)
+            except Exception: pass
+        return v if isinstance(v, t) else (t() if t is dict else [])
+    meta     = _pf(sequence.get("meta", {}))
     fps      = min(int(meta.get("fps", 24)), 12)   # cap at 12fps — CYCLES CPU budget
     duration = float(meta.get("total_duration", 5.0))
     total_frames = int(duration * fps)
@@ -127,7 +133,27 @@ def _build_and_render(sequence: dict, mp4_path: str, progress_cb=None) -> None:
     scene.render.filepath = os.path.join(frames_dir, "frame_")
 
     # ── 2. World / sky ──────────────────────────────────────────────────────
-    s_setup = sequence.get("scene_setup", {})
+    import json as _json
+
+    def _ensure_dict(v, default=None):
+        if default is None:
+            default = {}
+        if isinstance(v, str):
+            try:
+                return _json.loads(v)
+            except Exception:
+                return default
+        return v if isinstance(v, dict) else default
+
+    def _ensure_list(v):
+        if isinstance(v, str):
+            try:
+                return _json.loads(v)
+            except Exception:
+                return []
+        return v if isinstance(v, list) else []
+
+    s_setup = _ensure_dict(sequence.get("scene_setup", {}))
     world = bpy.data.worlds.new("World")
     scene.world = world
     world.use_nodes = True
@@ -203,10 +229,10 @@ def _build_and_render(sequence: dict, mp4_path: str, progress_cb=None) -> None:
         _spawn_primitive(prop, scene, prefix="prop")
 
     # ── 7. Asset manifest & actors ───────────────────────────────────────────
-    asset_manifest = sequence.get("asset_manifest", {})
+    asset_manifest = _pf(sequence.get("asset_manifest", {}))
     actor_objects  = {}  # actor_id -> root bpy object
 
-    for actor in sequence.get("actors", []):
+    for actor in _pf(sequence.get("actors", []), list):
         aid  = str(actor.get("id", ""))
         ipos = actor.get("initial_position", {})
         irot = actor.get("initial_rotation", {})
@@ -222,7 +248,7 @@ def _build_and_render(sequence: dict, mp4_path: str, progress_cb=None) -> None:
         actor_objects[aid]  = root
 
     # ── 8. Actor animation tracks ────────────────────────────────────────────
-    actor_tracks = sequence.get("actor_tracks", {})
+    actor_tracks = _pf(sequence.get("actor_tracks", {}))
     for aid, kfs in actor_tracks.items():
         obj = actor_objects.get(aid)
         if not obj or not kfs:
@@ -246,7 +272,7 @@ def _build_and_render(sequence: dict, mp4_path: str, progress_cb=None) -> None:
     cam_data.lens = 35  # 50mm equivalent in 1152x648
 
     baked_positions = _bake_actor_positions(actor_tracks, total_frames, fps)
-    cam_track = sequence.get("camera_track", [])
+    cam_track = _pf(sequence.get("camera_track", []), list)
 
     if not cam_track:
         cam_obj.location       = Vector((0, 10, 3))

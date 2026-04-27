@@ -128,14 +128,24 @@ async def generate_video(req: PromptRequest):
             m = "🔗 [后期合成] 合并五轨数据..."
             _save("merge", m)
             yield _emit("merge", m)
-            physics_objs   = worker_results["physics"].get("physics_objects", [])
-            asset_manifest = worker_results["asset"].get("asset_manifest", {})
+
+            def _parse_field(v):
+                """If v is a JSON-encoded string, decode it; otherwise return as-is."""
+                if isinstance(v, str):
+                    try:
+                        return json.loads(v)
+                    except Exception:
+                        return v
+                return v
+
+            physics_objs   = _parse_field(worker_results["physics"].get("physics_objects", []))
+            asset_manifest = _parse_field(worker_results["asset"].get("asset_manifest", {}))
             sequence = {
                 "meta":            meta,
-                "scene_setup":     worker_results["scene"].get("scene_setup", {}),
-                "actors":          worker_results["actor"].get("actors", []),
-                "actor_tracks":    worker_results["actor"].get("actor_tracks", {}),
-                "camera_track":    worker_results["camera"].get("camera_track", []),
+                "scene_setup":     _parse_field(worker_results["scene"].get("scene_setup", {})),
+                "actors":          _parse_field(worker_results["actor"].get("actors", [])),
+                "actor_tracks":    _parse_field(worker_results["actor"].get("actor_tracks", {})),
+                "camera_track":    _parse_field(worker_results["camera"].get("camera_track", [])),
                 "physics_objects": physics_objs,
                 "asset_manifest":  asset_manifest,
             }
