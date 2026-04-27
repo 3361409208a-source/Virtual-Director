@@ -32,9 +32,17 @@ def run_camera_agent(prompt: str, director: dict) -> dict:
         "- Rule of thirds: use offset to place subject off-center (e.g. y:1.5 instead of y:0)\n"
         "- FOV guidance: wide/epic=75-85, normal/follow=55-65, telephoto/tense=35-45\n"
         "- Transition: use 'smooth' for dramatic tension buildup; 'cut' for sudden impact/shock\n\n"
+        "CRITICAL — making movement VISIBLE:\n"
+        "- static_look is the BEST mode to show an actor moving: camera stays fixed while the actor\n"
+        "  travels across the frame. Use it whenever an actor runs/drives/flies past.\n"
+        "- follow mode keeps the actor centered — movement is implied NOT explicit. Only use follow\n"
+        "  for chase scenes or when a slow reveal is intended.\n"
+        "- orbit adds drama at the climax, after the action has already passed.\n\n"
         "Requirements:\n"
         "- Keyframe at t=0 is mandatory\n"
-        "- 3-6 total keyframes matching the 3-act story structure\n"
+        "- MINIMUM 4 keyframes with at least 2 mode changes (no single mode the whole video)\n"
+        "- Typical structure: t=0 wide_look (establish) → t=1s static_look (actor crosses) → "
+        "t=mid follow (chase) → t=climax orbit (impact)\n"
         "- Impact moment: switch to orbit or static_look with transition=cut, fov tighten by 10-15"
     )
     return llm_call(system, prompt, camera_tool)

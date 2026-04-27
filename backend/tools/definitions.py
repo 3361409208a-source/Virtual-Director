@@ -15,7 +15,7 @@ director_tool: dict = {
                     "type": "object",
                     "properties": {
                         "total_duration": {"type": "number", "description": "视频总时长（秒）"},
-                        "fps":            {"type": "integer", "description": "帧率，推荐60"},
+                        "fps":            {"type": "integer", "description": "帧率，推荐12（Blender CPU渲染，12fps已足够流畅）"},
                     },
                     "required": ["total_duration", "fps"],
                 },

@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Render outputs
+public/output_frames/
+public/cover.jpg
+public/*.mp4
+public/*.avi

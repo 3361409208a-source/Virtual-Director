@@ -51,7 +51,7 @@ export function ChatPanel({ messages, input, isRendering, model, onInputChange, 
       </div>
 
       <div className="chat-history">
-        {messages.map((msg, i) =>
+        {messages.map((msg) =>
           msg.type === 'log' ? (
             <div key={msg.id} className="message ai">
               <WorkflowLog entries={msg.entries ?? []} />

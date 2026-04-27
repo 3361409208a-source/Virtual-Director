@@ -6,7 +6,7 @@ import time
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
-from backend.config import SEQUENCE_PATH, FRONTEND_PUBLIC_DIR
+from backend.config import SEQUENCE_PATH, FRONTEND_PUBLIC_DIR, RENDERER
 from backend.models import PromptRequest
 from backend.agents.director import run_director
 from backend.agents.scene_agent import run_scene_agent
@@ -15,6 +15,7 @@ from backend.agents.camera_agent import run_camera_agent
 from backend.agents.physics_agent import run_physics_agent
 from backend.agents.asset_agent import run_asset_agent
 from backend.services.renderer import do_godot, do_ffmpeg
+from backend.services.renderer_blender import do_blender
 from backend.services.llm import set_model
 from backend.services.project_store import (
     create_project, append_chat_entry, save_sequence, save_video, finalize_project
@@ -178,20 +179,66 @@ async def generate_video(req: PromptRequest):
                 print(f"Cover gen failed: {e}")
                 cover_path = None
 
-            # ── Phase 4: Godot render ─────────────────────────────────────────
-            m = "🎬 [渲染农场] Godot 引擎输出中..."
-            _save("rendering", m)
-            yield _emit("rendering", m)
-            await asyncio.to_thread(do_godot, avi_path)
-            m = "✅ [渲染农场] 引擎输出完成"
-            _save("rendering_done", m)
-            yield _emit("rendering_done", m)
+            # ── Phase 4 & 5: Render ───────────────────────────────────────────
+            if RENDERER == "blender":
+                # Compute expected frame count for progress display
+                _meta = sequence.get("meta", {})
+                _total_f = int(float(_meta.get("total_duration", 5.0)) * min(int(_meta.get("fps", 24)), 12))
+                _frames_dir = mp4_path.replace(".mp4", "_frames")
 
-            # ── Phase 5: Convert ──────────────────────────────────────────────
-            m = "🔄 [输出压制] ffmpeg 封装母带 (包含定制封面)..."
-            _save("converting", m)
-            yield _emit("converting", m)
-            await asyncio.to_thread(do_ffmpeg, avi_path, mp4_path, cover_path)
+                render_state: dict = {"done": False, "err": None}
+                render_t0 = time.time()
+
+                async def _run_blender():
+                    try:
+                        await asyncio.to_thread(do_blender, sequence, mp4_path)
+                    except Exception as exc:
+                        render_state["err"] = exc
+                    finally:
+                        render_state["done"] = True
+
+                render_task = asyncio.ensure_future(_run_blender())
+                m = "🎬 [渲染农场] Blender Cycles CPU 初始化场景..."
+                _save("rendering", m)
+                yield _emit("rendering", m)
+
+                while not render_state["done"]:
+                    await asyncio.sleep(2.0)
+                    elapsed = time.time() - render_t0
+                    # Count rendered PNGs as a proxy for frame progress
+                    try:
+                        frame_count = len([f for f in os.listdir(_frames_dir) if f.endswith(".png")]) if os.path.isdir(_frames_dir) else 0
+                    except OSError:
+                        frame_count = 0
+                    if _total_f > 0 and frame_count > 0:
+                        pct = min(int(frame_count / _total_f * 100), 99)
+                        m = f"🎬 [渲染农场] Blender Cycles · 帧 {frame_count}/{_total_f} ({pct}%) · {elapsed:.0f}s"
+                    else:
+                        m = f"🎬 [渲染农场] Blender Cycles 加载场景 · {elapsed:.0f}s"
+                    _save("rendering", m)
+                    yield _emit("rendering", m)
+
+                await render_task
+                if render_state["err"]:
+                    raise render_state["err"]
+
+                m = "✅ [渲染农场] Blender 渲染完成"
+                _save("rendering_done", m)
+                yield _emit("rendering_done", m)
+            else:
+                m = "🎬 [渲染农场] Godot 引擎输出中..."
+                _save("rendering", m)
+                yield _emit("rendering", m)
+                await asyncio.to_thread(do_godot, avi_path)
+                m = "✅ [渲染农场] 引擎输出完成"
+                _save("rendering_done", m)
+                yield _emit("rendering_done", m)
+
+                # ── Phase 5: ffmpeg (Godot only) ──────────────────────────────
+                m = "🔄 [输出压制] ffmpeg 封装母带 (包含定制封面)..."
+                _save("converting", m)
+                yield _emit("converting", m)
+                await asyncio.to_thread(do_ffmpeg, avi_path, mp4_path, cover_path)
 
 
             m = "🎥 杀青！成片已送达右侧放映厅。"

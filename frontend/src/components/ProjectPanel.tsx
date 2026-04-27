@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react';
-import type { ProjectMeta, ProjectDetail, SceneSequence } from '../types';
+import type { ProjectMeta, ProjectDetail } from '../types';
 import { listProjects, getProject, projectVideoUrl } from '../services/api';
-import { ScenePreview } from './ScenePreview';
 
 interface Props {
   activeProjectId: string | null;
-  onSelectProject: (pid: string | null, sequence: SceneSequence | null) => void;
+  onSelectProject: (pid: string | null) => void;
 }
 
 export function ProjectPanel({ activeProjectId, onSelectProject }: Props) {
@@ -44,7 +43,7 @@ export function ProjectPanel({ activeProjectId, onSelectProject }: Props) {
     try {
       const d = await getProject(pid);
       setDetail(d);
-      onSelectProject(pid, d.sequence ?? null);
+      onSelectProject(pid);
     } catch {
       // ignore
     } finally {
@@ -54,7 +53,7 @@ export function ProjectPanel({ activeProjectId, onSelectProject }: Props) {
 
   const closeDetail = () => {
     setDetail(null);
-    onSelectProject(null, null);
+    onSelectProject(null);
   };
 
   const formatDate = (s: string) => {
@@ -96,14 +95,6 @@ export function ProjectPanel({ activeProjectId, onSelectProject }: Props) {
               {detail.has_video && (
                 <div className="project-video">
                   <video src={projectVideoUrl(detail.id)} controls width="100%" />
-                </div>
-              )}
-              {detail.sequence && (
-                <div className="project-preview-wrap">
-                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginBottom: 4 }}>分镜预览</div>
-                  <div className="project-preview-canvas">
-                    <ScenePreview sequence={detail.sequence} />
-                  </div>
                 </div>
               )}
             </div>
