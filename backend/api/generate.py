@@ -59,9 +59,10 @@ async def generate_video(req: PromptRequest):
             _save("director", m)
             yield _emit("director", m)
             # Token streaming relay for director (sequential — uses direct yield via queue)
+            _dir_loop = asyncio.get_running_loop()   # capture NOW in async context
             _dir_token_q: asyncio.Queue = asyncio.Queue()
             def _dir_token_cb(tok: str):
-                asyncio.run_coroutine_threadsafe(_dir_token_q.put(tok), asyncio.get_event_loop())
+                asyncio.run_coroutine_threadsafe(_dir_token_q.put(tok), _dir_loop)
 
             import threading
             _dir_result: dict = {}
@@ -72,7 +73,7 @@ async def generate_video(req: PromptRequest):
                 except Exception as _e:
                     _dir_err.append(_e)
                 finally:
-                    asyncio.run_coroutine_threadsafe(_dir_token_q.put(None), asyncio.get_event_loop())
+                    asyncio.run_coroutine_threadsafe(_dir_token_q.put(None), _dir_loop)
             threading.Thread(target=_run_director_thread, daemon=True).start()
             _dir_buf = ''
             while True:

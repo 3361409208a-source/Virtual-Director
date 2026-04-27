@@ -59,10 +59,12 @@ function StreamLog({ events }: { events: Record<string, unknown>[] }) {
         const extras = Object.entries(ev).filter(([k]) => !SKIP_KEYS.has(k));
         if (step === 'stream') {
           const agent = String(ev.agent ?? '');
+          const tail = msg.length > 300 ? '…' + msg.slice(-300) : msg;
           return (
             <div key={idx} className="stream-log-entry step-stream">
               <span className="stream-log-step stream-agent">{agent}</span>
-              <span className="stream-log-token">{msg}</span>
+              <span className="stream-log-chars">{msg.length}字</span>
+              <span className="stream-log-token">{tail}</span>
             </div>
           );
         }

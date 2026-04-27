@@ -762,9 +762,35 @@ video {
   margin-top: 1px;
 }
 .stream-log-key { color: #7ee787; margin-right: 4px; }
-.stream-log-entry.step-stream { border-left-color: #f0883e; background: rgba(240,136,62,0.04); align-items: flex-start; }
-.stream-agent { color: #f0883e !important; }
-.stream-log-token { color: #e6edf3; font-size: 11px; line-height: 1.5; white-space: pre-wrap; word-break: break-all; flex: 1; }
+.stream-log-entry.step-stream {
+  border-left-color: #f0883e;
+  background: rgba(240,136,62,0.04);
+  align-items: flex-start;
+  flex-wrap: wrap;
+  max-height: 72px;
+  overflow: hidden;
+}
+.stream-agent { color: #f0883e !important; flex-shrink: 0; }
+.stream-log-chars {
+  font-size: 10px;
+  color: #6e7681;
+  background: rgba(255,255,255,0.06);
+  border-radius: 3px;
+  padding: 1px 5px;
+  flex-shrink: 0;
+  align-self: center;
+}
+.stream-log-token {
+  color: #e6edf3;
+  font-size: 10.5px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-all;
+  flex: 1;
+  min-width: 0;
+  max-height: 52px;
+  overflow: hidden;
+}
 .stream-log-val {
   color: #8b949e;
   font-size: 10.5px;

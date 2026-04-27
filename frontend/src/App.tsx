@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { flushSync } from 'react-dom';
 import type { Message, LogEntry } from './types';
 import { streamGenerate, streamTestRender, projectVideoUrl } from './services/api';
 import { ChatPanel } from './components/ChatPanel';
@@ -72,18 +73,22 @@ export default function App() {
         }
         setCurrentStep(event.step);
         setCurrentMsg(event.msg);
-        setStreamLog(prev => {
-          const raw = event as unknown as Record<string, unknown>;
-          if (raw.step === 'stream') {
-            const last = prev[prev.length - 1];
-            if (last && last.step === 'stream' && last.agent === raw.agent) {
-              const updated = [...prev];
-              updated[updated.length - 1] = { ...last, msg: String(last.msg ?? '') + String(raw.msg ?? '') };
-              return updated;
-            }
-          }
-          return [...prev, raw];
-        });
+        const raw = event as unknown as Record<string, unknown>;
+        if (raw.step === 'stream') {
+          flushSync(() => {
+            setStreamLog(prev => {
+              const idx = prev.findIndex(e => e.step === 'stream' && e.agent === raw.agent);
+              if (idx >= 0) {
+                const updated = [...prev];
+                updated[idx] = { ...updated[idx], msg: String(updated[idx].msg ?? '') + String(raw.msg ?? '') };
+                return updated;
+              }
+              return [...prev, raw];
+            });
+          });
+        } else {
+          setStreamLog(prev => [...prev, raw]);
+        }
         if (event.step === 'done') {
           if (event.video_url) setVideoUrl(event.video_url);
           setIsRendering(false);
