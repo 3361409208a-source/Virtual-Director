@@ -132,6 +132,28 @@ export function projectVideoUrl(pid: string): string {
   return `${API_BASE}/projects/${pid}/video`;
 }
 
+// ── Config ─────────────────────────────────────────────────────────────────
+
+export interface Config {
+  enable_model_search: boolean;
+}
+
+export async function getConfig(): Promise<Config> {
+  const res = await fetch(`${API_BASE}/config`);
+  if (!res.ok) throw new Error('获取配置失败');
+  return res.json();
+}
+
+export async function updateConfig(config: Partial<Config>): Promise<Config> {
+  const res = await fetch(`${API_BASE}/config`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
+  });
+  if (!res.ok) throw new Error('更新配置失败');
+  return res.json();
+}
+
 /**
  * Stream the /api/generate SSE endpoint.
  * Calls onEvent for each parsed SSE frame until the stream closes.

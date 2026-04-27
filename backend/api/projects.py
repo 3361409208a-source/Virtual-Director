@@ -1,8 +1,30 @@
 from fastapi import APIRouter
 from fastapi.responses import FileResponse, JSONResponse
+from pydantic import BaseModel
 from backend.services.project_store import list_projects, get_project, get_project_video_path
+from backend.config import ENABLE_MODEL_SEARCH
 
 router = APIRouter()
+
+
+class ConfigUpdate(BaseModel):
+    enable_model_search: bool | None = None
+
+
+@router.get("/config")
+def get_config():
+    """Get current configuration."""
+    return {"enable_model_search": ENABLE_MODEL_SEARCH}
+
+
+@router.post("/config")
+def update_config(config: ConfigUpdate):
+    """Update configuration (runtime only, not persisted to .env)."""
+    global ENABLE_MODEL_SEARCH
+    if config.enable_model_search is not None:
+        ENABLE_MODEL_SEARCH = config.enable_model_search
+    return {"enable_model_search": ENABLE_MODEL_SEARCH}
+
 
 @router.get("/projects")
 def get_projects(limit: int = 50, offset: int = 0):

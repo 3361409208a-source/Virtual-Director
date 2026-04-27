@@ -1,6 +1,7 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import type { Message } from '../types';
 import { WorkflowLog } from './WorkflowLog';
+import { getConfig, updateConfig } from '../services/api';
 
 import type { ModelSelection, RendererSelection } from '../App';
 
@@ -30,10 +31,25 @@ const MODEL_LABELS: Record<ModelSelection, { short: string; desc: string; name: 
 
 export function ChatPanel({ messages, input, isRendering, model, renderer, isTesting, testMsg, onInputChange, onSend, onModelChange, onRendererChange, onTestRender }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [enableModelSearch, setEnableModelSearch] = useState(true);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  useEffect(() => {
+    getConfig().then(config => setEnableModelSearch(config.enable_model_search)).catch(console.error);
+  }, []);
+
+  const toggleModelSearch = async () => {
+    const newValue = !enableModelSearch;
+    try {
+      const config = await updateConfig({ enable_model_search: newValue });
+      setEnableModelSearch(config.enable_model_search);
+    } catch (e) {
+      console.error('Failed to update config:', e);
+    }
+  };
 
   return (
     <div className="glass-panel chat-section">
@@ -67,6 +83,18 @@ export function ChatPanel({ messages, input, isRendering, model, renderer, isTes
             disabled={isRendering || isTesting}
             title="Blender Cycles CPU 渲染"
           >Blender</button>
+        </div>
+        <div className="model-search-toggle">
+          <label className="toggle-switch">
+            <input
+              type="checkbox"
+              checked={enableModelSearch}
+              onChange={toggleModelSearch}
+              disabled={isRendering}
+            />
+            <span className="toggle-slider"></span>
+            <span className="toggle-label">{enableModelSearch ? '🔍 搜索模型' : '🧱 AI建模'}</span>
+          </label>
         </div>
         <button
           className={`test-render-btn ${isTesting ? 'testing' : ''}`}
