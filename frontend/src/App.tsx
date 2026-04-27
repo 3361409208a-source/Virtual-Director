@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { Message, LogEntry } from './types';
-import { streamGenerate, projectVideoUrl } from './services/api';
+import { streamGenerate, streamTestRender, projectVideoUrl } from './services/api';
 import { ChatPanel } from './components/ChatPanel';
 import { VideoPlayer } from './components/VideoPlayer';
 import { ProjectPanel } from './components/ProjectPanel';
@@ -21,6 +21,8 @@ export default function App() {
   const [videoUrl, setVideoUrl]       = useState<string | null>(null);
   const [model, setModel]             = useState<ModelSelection>('deepseek-v4-flash');
   const [renderer, setRenderer]       = useState<RendererSelection>('godot');
+  const [isTesting, setIsTesting]     = useState(false);
+  const [testMsg, setTestMsg]         = useState('');
   const [currentStep, setCurrentStep]  = useState<string>('');
   const [currentMsg, setCurrentMsg]    = useState<string>('');
 
@@ -101,6 +103,27 @@ export default function App() {
         onSend={handleSend}
         onModelChange={setModel}
         onRendererChange={setRenderer}
+        isTesting={isTesting}
+        testMsg={testMsg}
+        onTestRender={async (r) => {
+          setIsTesting(true);
+          setTestMsg('');
+          setVideoUrl(null);
+          try {
+            await streamTestRender(r, ev => {
+              setTestMsg(ev.msg);
+              if (ev.step === 'test_done') {
+                if ((ev as unknown as Record<string, unknown>).video_url) setVideoUrl(`http://localhost:8000/api/test-video/${r}?t=${Date.now()}`);
+                setIsTesting(false);
+              } else if (ev.step === 'test_error') {
+                setIsTesting(false);
+              }
+            });
+          } catch (e) {
+            setTestMsg(`❌ 请求失败: ${e instanceof Error ? e.message : String(e)}`);
+            setIsTesting(false);
+          }
+        }}
       />
       <VideoPlayer videoUrl={viewingProject?.videoUrl ?? videoUrl} isRendering={isRendering} currentStep={currentStep} currentMsg={currentMsg} />
       <ProjectPanel

@@ -238,6 +238,44 @@ body {
 .renderer-btn.active { background: #fff; color: var(--accent-color); box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
 .renderer-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
+/* Test Render Button */
+.test-render-btn {
+  margin-top: 8px;
+  width: 100%;
+  padding: 7px 0;
+  border: 1.5px dashed var(--border-color);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.test-render-btn:hover:not(:disabled) {
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+  background: rgba(0, 113, 227, 0.04);
+}
+.test-render-btn.testing {
+  border-style: solid;
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+}
+.test-render-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.test-msg {
+  margin-top: 6px;
+  padding: 6px 10px;
+  background: #f2f2f7;
+  border-radius: 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  word-break: break-all;
+  line-height: 1.5;
+}
+
 .model-select {
   appearance: none;
   background-color: rgba(255, 255, 255, 0.05);

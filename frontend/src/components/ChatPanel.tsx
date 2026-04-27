@@ -10,10 +10,13 @@ interface Props {
   isRendering: boolean;
   model: ModelSelection;
   renderer: RendererSelection;
+  isTesting: boolean;
+  testMsg: string;
   onInputChange: (val: string) => void;
   onSend: () => void;
   onModelChange: (m: ModelSelection) => void;
   onRendererChange: (r: RendererSelection) => void;
+  onTestRender: (r: RendererSelection) => void;
 }
 
 const MODEL_LABELS: Record<ModelSelection, { short: string; desc: string; name: string }> = {
@@ -24,7 +27,7 @@ const MODEL_LABELS: Record<ModelSelection, { short: string; desc: string; name: 
   'GLM-4.7-Flash':     { short: 'GLM', name: 'GLM-4.7-Flash',     desc: '模力方舟 · 智谱轻快模型' },
 };
 
-export function ChatPanel({ messages, input, isRendering, model, renderer, onInputChange, onSend, onModelChange, onRendererChange }: Props) {
+export function ChatPanel({ messages, input, isRendering, model, renderer, isTesting, testMsg, onInputChange, onSend, onModelChange, onRendererChange, onTestRender }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -60,10 +63,19 @@ export function ChatPanel({ messages, input, isRendering, model, renderer, onInp
           <button
             className={`renderer-btn ${renderer === 'blender' ? 'active' : ''}`}
             onClick={() => onRendererChange('blender')}
-            disabled={isRendering}
+            disabled={isRendering || isTesting}
             title="Blender Cycles CPU 渲染"
           >Blender</button>
         </div>
+        <button
+          className={`test-render-btn ${isTesting ? 'testing' : ''}`}
+          onClick={() => onTestRender(renderer)}
+          disabled={isRendering || isTesting}
+          title={`测试 ${renderer} 渲染器（跳过AI，直接渲染最小场景）`}
+        >
+          {isTesting ? '⏳ 测试中...' : '🧪 测试渲染'}
+        </button>
+        {testMsg && <div className="test-msg">{testMsg}</div>}
       </div>
 
       <div className="chat-history">

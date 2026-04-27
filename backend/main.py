@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.api.generate import router as generate_router
 from backend.api.projects import router as projects_router
+from backend.api.test_render import router as test_render_router
 
 app = FastAPI(
     title="Virtual Director API",
@@ -20,5 +21,6 @@ app.add_middleware(
 
 app.include_router(generate_router, prefix="/api")
 app.include_router(projects_router, prefix="/api")
+app.include_router(test_render_router, prefix="/api")
 
 # 启动命令: uvicorn backend.main:app --reload
