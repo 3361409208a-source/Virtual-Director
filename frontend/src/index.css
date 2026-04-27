@@ -1563,29 +1563,13 @@ video {
 }
 
 /* ── Collapsible Log Panel ──────────────────────────────────────── */
-.ai-log-header {
-  padding: 8px 14px;
-  font-size: 11px;
-  color: #8b949e;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  border-bottom: 1px solid var(--border-color);
+.ai-result-viewer-loading {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  cursor: pointer;
-  user-select: none;
-  transition: background 0.12s;
+  justify-content: center;
+  background: #0d1117;
 }
-.ai-log-header:hover { background: rgba(255,255,255,0.02); }
-.ai-log-toggle {
-  margin-left: auto;
-  font-size: 10px;
-  color: #6e7681;
-}
-.ai-log-panel.collapsed {
-  flex: 0 0 auto;
-}
-.ai-log-panel.collapsed .ai-log-body { display: none; }
 
 /* ── Base Model Modal ───────────────────────────────────────────── */
 .base-model-modal-overlay {

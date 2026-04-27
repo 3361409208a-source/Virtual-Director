@@ -36,7 +36,6 @@ export function ModelLibraryPanel() {
   const [aiResult, setAiResult]         = useState<AIGenerateResult | null>(null);
   const [aiError, setAiError]           = useState('');
   const [aiLog, setAiLog]               = useState<string[]>([]);
-  const [aiLogCollapsed, setAiLogCollapsed] = useState(false);
   const logEndRef                       = useRef<HTMLDivElement>(null);
 
   // Base model modal
@@ -121,7 +120,6 @@ export function ModelLibraryPanel() {
           } else if (ev.step === 'done') {
             setAiResult(ev as unknown as AIGenerateResult);
             setAiLog(prev => [...prev, ev.msg]);
-            setAiLogCollapsed(true); // auto-collapse log after success
             load();
           } else if (ev.step === 'error') {
             setAiError(ev.msg);
@@ -329,31 +327,10 @@ export function ModelLibraryPanel() {
                   {aiError && <div className="ai-model-error">❌ {aiError}</div>}
                 </div>
 
-                {/* Right: reasoning log (collapsible) + preview */}
+                {/* Right: preview (top) + reasoning log (bottom) */}
                 <div className="ai-model-right">
-                  {/* Collapsible reasoning log */}
-                  {(aiLog.length > 0 || aiGenerating) && (
-                    <div className={`ai-log-panel ${aiLogCollapsed ? 'collapsed' : ''}`}>
-                      <div className="ai-log-header" onClick={() => setAiLogCollapsed(!aiLogCollapsed)}>
-                        {aiGenerating && <span className="ai-spinner" style={{ width: 10, height: 10, borderWidth: 1.5, marginRight: 6 }} />}
-                        <span>推理过程</span>
-                        <span className="ai-log-toggle">{aiLogCollapsed ? '▼' : '▲'}</span>
-                      </div>
-                      {!aiLogCollapsed && (
-                        <div className="ai-log-body">
-                          {aiLog.map((line, i) => (
-                            <div key={i} className={`ai-log-line ${(line.startsWith('📝') || line.startsWith('💭')) ? 'thinking' : ''}`}>
-                              {line}
-                            </div>
-                          ))}
-                          <div ref={logEndRef} />
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Result preview — stays visible after save */}
-                  {aiResult && (
+                  {/* Result preview — main area, stays visible after save */}
+                  {aiResult ? (
                     <div className="ai-result">
                       <div className="ai-result-viewer">
                         {/* @ts-ignore */}
@@ -381,13 +358,36 @@ export function ModelLibraryPanel() {
                         <button className="ai-regenerate-btn" onClick={handleAiGenerate} disabled={aiGenerating}>🔄 重新生成</button>
                       </div>
                     </div>
-                  )}
-
-                  {!aiResult && aiLog.length === 0 && (
+                  ) : aiGenerating ? (
+                    <div className="ai-result">
+                      <div className="ai-result-viewer ai-result-viewer-loading">
+                        <span className="ai-spinner" style={{ width: 28, height: 28, borderWidth: 3 }} />
+                        <span style={{ marginTop: 10, fontSize: 13, color: '#8b949e' }}>AI 建模中…</span>
+                      </div>
+                    </div>
+                  ) : (
                     <div className="ai-placeholder">
                       <div className="ai-placeholder-icon">✨</div>
                       <div>选择参考模型，输入描述，点击生成</div>
-                      <div style={{ fontSize: 11, color: '#6e7681', marginTop: 4 }}>推理过程将实时显示在此区域</div>
+                      <div style={{ fontSize: 11, color: '#6e7681', marginTop: 4 }}>推理过程将实时显示在底部</div>
+                    </div>
+                  )}
+
+                  {/* Reasoning log — always at bottom */}
+                  {(aiLog.length > 0 || aiGenerating) && (
+                    <div className="ai-log-panel">
+                      <div className="ai-log-title">
+                        {aiGenerating && <span className="ai-spinner" style={{ width: 10, height: 10, borderWidth: 1.5, marginRight: 6 }} />}
+                        推理过程
+                      </div>
+                      <div className="ai-log-body">
+                        {aiLog.map((line, i) => (
+                          <div key={i} className={`ai-log-line ${(line.startsWith('📝') || line.startsWith('💭')) ? 'thinking' : ''}`}>
+                            {line}
+                          </div>
+                        ))}
+                        <div ref={logEndRef} />
+                      </div>
                     </div>
                   )}
                 </div>
