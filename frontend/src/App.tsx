@@ -97,7 +97,7 @@ export default function App() {
         } else if (event.step === 'error') {
           setIsRendering(false);
         }
-      }, model, renderer);
+      }, model, renderer, draftMode);
     } catch (err: unknown) {
       appendEntry(logId, {
         step: 'error',

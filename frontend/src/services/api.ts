@@ -251,11 +251,12 @@ export async function streamGenerate(
   onEvent: (event: SSEEvent) => void,
   model: string = 'deepseek-chat',
   renderer: 'godot' | 'blender' = 'godot',
+  draftMode: boolean = false,
 ): Promise<void> {
   const response = await fetch(`${API_BASE}/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, model, renderer }),
+    body: JSON.stringify({ prompt, model, renderer, draft_mode: draftMode }),
   });
 
   if (!response.body) throw new Error('无响应流');

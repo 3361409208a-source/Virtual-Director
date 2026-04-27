@@ -2,6 +2,7 @@ import { useRef, useEffect, useState } from 'react';
 import type { Message } from '../types';
 import { WorkflowLog } from './WorkflowLog';
 import { getConfig, updateConfig } from '../services/api';
+import { SceneDraftPanel } from './SceneDraftPanel';
 
 import type { ModelSelection, RendererSelection } from '../App';
 
@@ -139,20 +140,15 @@ export function ChatPanel({ messages, input, isRendering, model, renderer, isTes
       </div>
 
       {draftId && (
-        <div className="scene-draft-panel glass-panel">
-          <div className="panel-header">
-            <h3>🎬 场景草稿审核</h3>
-            <button onClick={onDraftClose}>✕</button>
-          </div>
-          <div className="draft-info">
-            <div><strong>草稿ID：</strong>{draftId}</div>
-            <div><strong>状态：</strong>待审核</div>
-          </div>
-          <div className="draft-actions">
-            <button onClick={onDraftClose} className="btn-secondary">关闭</button>
-            <button className="btn-primary">确认并生成视频</button>
-          </div>
-        </div>
+        <SceneDraftPanel
+          draftId={draftId}
+          onClose={onDraftClose}
+          onConfirm={(draft) => {
+            onDraftClose();
+            // TODO: Trigger rendering with confirmed draft
+            console.log('Draft confirmed:', draft);
+          }}
+        />
       )}
 
       <div className="input-area">
