@@ -1,6 +1,7 @@
 import json
 from contextvars import ContextVar
 from openai import OpenAI
+import anthropic as _anthropic_mod
 from backend.config import (
     DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL,
     GLM_API_KEY, GLM_BASE_URL, GLM_MODEL,
@@ -40,12 +41,18 @@ def _get_client_config(selection: str):
         ), GLM_MODEL
 
     elif selection == "astron-code-latest":
-        return OpenAI(
+        # Anthropic-compatible API — uses /v1/messages, not /chat/completions
+        base = ANTHROPIC_BASE_URL.rstrip("/")
+        # Strip trailing /v1 if present; the SDK adds its own path
+        if base.endswith("/v1"):
+            base = base[:-3]
+        client = _anthropic_mod.Anthropic(
             api_key=ANTHROPIC_API_KEY,
-            base_url=ANTHROPIC_BASE_URL,
+            base_url=base,
             timeout=120.0,
-            max_retries=3
-        ), "astron-code-latest"
+            max_retries=3,
+        )
+        return client, "astron-code-latest"
 
     return None, None
 
@@ -182,6 +189,91 @@ def _extract_json(s: str) -> dict:
 
 
 
+def _llm_call_anthropic(
+    client, model: str, system: str, user: str, tool: dict,
+    token_cb=None, thinking_cb=None,
+) -> dict:
+    """LLM call via Anthropic SDK (messages API with tool_use)."""
+    # Convert OpenAI-style tool definition to Anthropic format
+    func_info = tool["function"]
+    tool_name = func_info["name"]
+    tool_schema = func_info.get("parameters", {})
+    anthropic_tool = {
+        "name": tool_name,
+        "description": func_info.get("description", ""),
+        "input_schema": tool_schema,
+    }
+
+    # Anthropic uses system as a top-level param, not in messages
+    messages = [{"role": "user", "content": user}]
+
+    retries = 2
+    last_error = None
+
+    for attempt in range(retries + 1):
+        try:
+            args_str = ""
+            with client.messages.stream(
+                model=model,
+                max_tokens=4096,
+                system=system,
+                messages=messages,
+                tools=[anthropic_tool],
+                tool_choice={"type": "tool", "name": tool_name},
+            ) as stream:
+                for event in stream:
+                    if event.type == "content_block_delta":
+                        if event.delta.type == "text_delta":
+                            frag = event.delta.text
+                            args_str += frag
+                            if token_cb:
+                                try: token_cb(frag)
+                                except Exception: pass
+                        elif event.delta.type == "input_json_delta":
+                            frag = event.delta.partial_json
+                            args_str += frag
+                            if token_cb:
+                                try: token_cb(frag)
+                                except Exception: pass
+                        elif event.delta.type == "thinking_delta":
+                            frag = event.delta.thinking
+                            if thinking_cb:
+                                try: thinking_cb(frag)
+                                except Exception: pass
+
+            if not args_str:
+                raise RuntimeError("Anthropic LLM did not return content.")
+
+            try:
+                parsed = _extract_json(args_str)
+                func_name = tool["function"]["name"]
+                if isinstance(parsed, dict):
+                    if len(parsed) == 1 and func_name in parsed and isinstance(parsed[func_name], dict):
+                        parsed = parsed[func_name]
+                    elif len(parsed) == 1 and "parameters" in parsed and isinstance(parsed["parameters"], dict):
+                        parsed = parsed["parameters"]
+                if not isinstance(parsed, dict):
+                    raise ValueError(f"Expected JSON object, got {type(parsed).__name__}: {args_str[:120]}")
+                return parsed
+            except Exception as e:
+                print(f"Attempt {attempt + 1} failed to parse JSON: {args_str[:200]}...")
+                last_error = e
+                messages.append({"role": "assistant", "content": args_str})
+                messages.append({
+                    "role": "user",
+                    "content": f"Validation failed: {str(e)}. Please correct your JSON formatting and try again. Output ONLY raw JSON.",
+                })
+                continue
+        except Exception as e:
+            if attempt == retries:
+                raise e
+            print(f"Attempt {attempt + 1} failed: {str(e)}")
+            last_error = e
+            continue
+
+    raise last_error or RuntimeError("Anthropic LLM call failed after retries")
+
+
 def llm_call(system: str, user: str, tool: dict, token_cb=None, thinking_cb=None) -> dict:
     """Single LLM call that enforces a specific function tool and returns parsed args.
     
@@ -194,6 +286,11 @@ def llm_call(system: str, user: str, tool: dict, token_cb=None, thinking_cb=None
     if not client:
         raise RuntimeError(f"Unsupported model selection: {selection}")
 
+    # ── Anthropic path ──────────────────────────────────────────────────────
+    if isinstance(client, _anthropic_mod.Anthropic):
+        return _llm_call_anthropic(client, model, system, user, tool, token_cb, thinking_cb)
+
+    # ── OpenAI-compatible path ──────────────────────────────────────────────
     # DeepSeek V4 API currently returns 400 errors for strict tool_choice on both flash and pro models.
     # We will use Prompt Engineering (JSON mode) for them.
     supports_tools = selection not in ["deepseek-reasoner", "deepseek-v4-pro", "deepseek-v4-flash"]

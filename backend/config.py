@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 
-load_dotenv() # Load variables from .env
+load_dotenv(override=True) # Load variables from .env, override system env vars
 
 
 ROOT_DIR            = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -43,7 +43,7 @@ SILICONFLOW_API_KEY  = os.environ.get("SILICONFLOW_API_KEY", "")
 SILICONFLOW_BASE_URL = "https://api.siliconflow.cn/v1"
 SILICONFLOW_IMAGE_MODEL = "Kwai-Kolors/Kolors"
 
-# Astron / Aliyun Maas API (兼容 Anthropic 格式)
+# Astron / Aliyun Maas API (兼容 OpenAI 格式)
 ANTHROPIC_API_KEY    = os.environ.get("ANTHROPIC_AUTH_TOKEN", "")
-ANTHROPIC_BASE_URL   = os.environ.get("ANTHROPIC_BASE_URL", "https://maas-coding-api.cn-huabei-1.xf-yun.com/anthropic")
+ANTHROPIC_BASE_URL   = os.environ.get("ANTHROPIC_BASE_URL", "https://maas-coding-api.cn-huabei-1.xf-yun.com/anthropic/v1")
 
