@@ -1242,7 +1242,7 @@ video {
 }
 .ai-model-textarea:focus { border-color: #388bfd; }
 .ai-generate-btn {
-  background: linear-gradient(135deg, #388bfd, #6e40c9);
+  background: #1f6feb;
   color: #fff;
   border: none;
   border-radius: 8px;
