@@ -16,7 +16,7 @@ AI 多智能体协作 · Godot 4 实时渲染 · SSE 全链路实时反馈
 
 ---
 
-## 🎥 演示视频
+## 🎥 渲染视频
 
 https://github.com/user-attachments/assets/c765b1d2-898c-4d1e-ad57-4a9e02b1cc2f
 
