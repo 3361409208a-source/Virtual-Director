@@ -239,3 +239,176 @@
     color: #ccc;
   }
 }
+
+/* Scene Draft Panel */
+.scene-draft-panel {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 600px;
+  max-height: 80vh;
+  overflow-y: auto;
+  z-index: 1000;
+  background: rgba(30, 30, 30, 0.95);
+  border: 1px solid #444;
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #444;
+}
+
+.panel-header h3 {
+  margin: 0;
+}
+
+.panel-header button {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.draft-info {
+  margin-bottom: 20px;
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+}
+
+.draft-info > div {
+  margin: 5px 0;
+}
+
+.draft-section {
+  margin-bottom: 20px;
+}
+
+.draft-section h4 {
+  margin: 10px 0;
+}
+
+.actor-card {
+  padding: 10px;
+  margin: 10px 0;
+  background: rgba(50, 50, 50, 0.5);
+  border-radius: 4px;
+}
+
+.actor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.actor-type {
+  font-size: 12px;
+  color: #888;
+  background: rgba(100, 100, 100, 0.3);
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.actor-model {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #aaa;
+}
+
+.model-source {
+  color: #4CAF50;
+}
+
+.actor-editor {
+  margin-top: 10px;
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+}
+
+.editor-row {
+  display: flex;
+  gap: 10px;
+  margin: 5px 0;
+  align-items: center;
+}
+
+.editor-row label {
+  font-size: 12px;
+  color: #aaa;
+}
+
+.editor-row input {
+  width: 60px;
+  padding: 4px;
+  background: rgba(50, 50, 50, 0.8);
+  border: 1px solid #444;
+  border-radius: 3px;
+  color: #fff;
+}
+
+.camera-card {
+  padding: 10px;
+  margin: 10px 0;
+  background: rgba(50, 50, 50, 0.5);
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.camera-card div {
+  margin: 4px 0;
+}
+
+.draft-section textarea {
+  width: 100%;
+  padding: 10px;
+  background: rgba(50, 50, 50, 0.8);
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #fff;
+  resize: vertical;
+}
+
+.draft-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.draft-actions button {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.btn-secondary {
+  background: #555;
+  color: #fff;
+}
+
+.btn-danger {
+  background: #d32f2f;
+  color: #fff;
+}
+
+.btn-primary {
+  background: #4CAF50;
+  color: #fff;
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

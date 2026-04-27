@@ -93,6 +93,26 @@ async def generate_video(req: PromptRequest):
             _save("director_done", m)
             yield _emit("director_done", m)
 
+            # ── Draft Mode: Stop here and create draft for review ──────────────
+            if req.draft_mode:
+                from backend.services.scene_draft_store import create_draft
+                m = "📝 [草稿模式] 创建场景草稿供审核..."
+                _save("draft_create", m)
+                yield _emit("draft_create", m)
+
+                # Create draft with director data (simplified for now)
+                draft_data = {
+                    "scene": ctx.get("scene_setup", {}),
+                    "actors": [{"actor_id": aid, "type": "humanoid", "model_source": "builtin", "model_filename": "human.glb", "position": {"x": 0, "y": 0, "z": 0}, "rotation": {"x": 0, "y": 0, "z": 0}, "scale": {"x": 1, "y": 1, "z": 1}, "actions": []} for aid in director.get("actor_ids", [])],
+                    "cameras": ctx.get("cameras", [])
+                }
+                draft_id = create_draft(req.prompt, draft_data)
+                m = f"✅ [草稿模式] 草稿已创建: {draft_id}"
+                _save("draft_done", m)
+                yield _emit("draft_done", m, draft_id=draft_id)
+                yield _emit("done", "草稿生成完成，请审核", draft_id=draft_id)
+                return
+
             # ── Phase 2: Workers (parallel) ───────────────────────────────────
             m = "⚡ [工作组] 场景美术 · 角色指导 · 摄影指导 · 物理特效 · 美术资产 — 五组同时开拍..."
             _save("workers", m)

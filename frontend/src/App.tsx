@@ -2,10 +2,12 @@ import { useState } from 'react';
 import { flushSync } from 'react-dom';
 import type { Message, LogEntry } from './types';
 import { streamGenerate, streamTestRender, projectVideoUrl } from './services/api';
+import type { SceneDraft } from './services/api';
 import { ChatPanel } from './components/ChatPanel';
 import { VideoPlayer } from './components/VideoPlayer';
 import { ProjectPanel } from './components/ProjectPanel';
 import { ModelLibraryPanel } from './components/ModelLibraryPanel';
+import { SceneDraftPanel } from './components/SceneDraftPanel';
 
 const WELCOME: Message = {
   id: '0',
@@ -28,6 +30,8 @@ export default function App() {
   const [streamLog, setStreamLog]      = useState<Record<string, unknown>[]>([]);
 
   const [viewingProject, setViewingProject] = useState<{ id: string; videoUrl: string | null } | null>(null);
+  const [viewingDraft, setViewingDraft] = useState<string | null>(null);
+  const [draftMode, setDraftMode] = useState(false);
 
   const appendEntry = (logId: string, entry: LogEntry) =>
     setMessages(prev => prev.map(m =>
@@ -88,6 +92,9 @@ export default function App() {
         }
         if (event.step === 'done') {
           if (event.video_url) setVideoUrl(event.video_url);
+          if ((event as unknown as Record<string, unknown>).draft_id) {
+            setViewingDraft((event as unknown as Record<string, unknown>).draft_id as string);
+          }
           setIsRendering(false);
         } else if (event.step === 'error') {
           setIsRendering(false);
@@ -103,6 +110,12 @@ export default function App() {
     }
   };
 
+  const handleDraftConfirm = async (draft: SceneDraft) => {
+    setViewingDraft(null);
+    // TODO: Trigger rendering with confirmed draft
+    console.log('Draft confirmed:', draft);
+  };
+
   return (
     <div className="app-container">
       <ChatPanel
@@ -111,10 +124,12 @@ export default function App() {
         isRendering={isRendering}
         model={model}
         renderer={renderer}
+        draftMode={draftMode}
         onInputChange={setInput}
         onSend={handleSend}
         onModelChange={setModel}
         onRendererChange={setRenderer}
+        onDraftModeChange={setDraftMode}
         isTesting={isTesting}
         testMsg={testMsg}
         onTestRender={async (r) => {
@@ -149,6 +164,13 @@ export default function App() {
         }}
       />
       <ModelLibraryPanel />
+      {viewingDraft && (
+        <SceneDraftPanel
+          draftId={viewingDraft}
+          onClose={() => setViewingDraft(null)}
+          onConfirm={handleDraftConfirm}
+        />
+      )}
     </div>
   );
 }
