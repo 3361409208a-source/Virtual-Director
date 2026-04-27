@@ -31,7 +31,7 @@ export function ModelLibraryPanel() {
   // AI modeling state
   const [aiPrompt, setAiPrompt]         = useState('');
   const [aiBaseModel, setAiBaseModel]   = useState<ModelMeta | null>(null);
-  const [aiLlm, setAiLlm]              = useState('deepseek-chat');
+  const [aiLlm, setAiLlm]              = useState('astron-code-latest');
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiResult, setAiResult]         = useState<AIGenerateResult | null>(null);
   const [aiError, setAiError]           = useState('');
@@ -290,6 +290,7 @@ export function ModelLibraryPanel() {
                   <div className="ai-section-label">② 选择推理模型</div>
                   <div className="ai-llm-selector">
                     {[
+                      { id: 'astron-code-latest', label: 'Astron Code',    desc: '阿里云 · 代码专家' },
                       { id: 'deepseek-chat',      label: 'DeepSeek V3',    desc: '快速 · 推荐' },
                       { id: 'deepseek-reasoner',  label: 'DeepSeek R1',    desc: '深度推理' },
                       { id: 'GLM-4.7-Flash',      label: 'GLM-4.7 Flash',  desc: '极速' },

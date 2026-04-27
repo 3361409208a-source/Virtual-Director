@@ -43,3 +43,7 @@ SILICONFLOW_API_KEY  = os.environ.get("SILICONFLOW_API_KEY", "")
 SILICONFLOW_BASE_URL = "https://api.siliconflow.cn/v1"
 SILICONFLOW_IMAGE_MODEL = "Kwai-Kolors/Kolors"
 
+# Astron / Aliyun Maas API (兼容 Anthropic 格式)
+ANTHROPIC_API_KEY    = os.environ.get("ANTHROPIC_AUTH_TOKEN", "")
+ANTHROPIC_BASE_URL   = os.environ.get("ANTHROPIC_BASE_URL", "https://maas-coding-api.cn-huabei-1.xf-yun.com/anthropic")
+

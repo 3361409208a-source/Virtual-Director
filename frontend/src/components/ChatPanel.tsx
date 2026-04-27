@@ -25,6 +25,7 @@ const MODEL_LABELS: Record<ModelSelection, { short: string; desc: string; name: 
   'deepseek-v4-flash': { short: 'V4',  name: 'DeepSeek V4 Flash', desc: '最新旗舰 · 极速生成' },
   'deepseek-v4-pro':   { short: 'PRO', name: 'DeepSeek V4 Pro',   desc: '深度思考 · 逻辑大师' },
   'GLM-4.7-Flash':     { short: 'GLM', name: 'GLM-4.7-Flash',     desc: '模力方舟 · 智谱轻快模型' },
+  'astron-code-latest': { short: 'ASTR', name: 'Astron Code',       desc: '阿里云 Maas · 代码生成专家' },
 };
 
 export function ChatPanel({ messages, input, isRendering, model, renderer, isTesting, testMsg, onInputChange, onSend, onModelChange, onRendererChange, onTestRender }: Props) {

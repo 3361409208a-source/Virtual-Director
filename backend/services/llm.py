@@ -3,7 +3,8 @@ from contextvars import ContextVar
 from openai import OpenAI
 from backend.config import (
     DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL,
-    GLM_API_KEY, GLM_BASE_URL, GLM_MODEL
+    GLM_API_KEY, GLM_BASE_URL, GLM_MODEL,
+    ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL
 )
 
 
@@ -11,7 +12,8 @@ from backend.config import (
 AVAILABLE_MODELS = [
     "deepseek-chat", "deepseek-reasoner",
     "deepseek-v4-flash", "deepseek-v4-pro", 
-    "GLM-4.7-Flash"
+    "GLM-4.7-Flash",
+    "astron-code-latest"
 ]
 
 # Per-request model override (safe for concurrent requests via asyncio context)
@@ -36,8 +38,14 @@ def _get_client_config(selection: str):
             timeout=120.0,
             max_retries=3
         ), GLM_MODEL
-    return None, None
 
+    elif selection == "astron-code-latest":
+        return OpenAI(
+            api_key=ANTHROPIC_API_KEY,
+            base_url=ANTHROPIC_BASE_URL,
+            timeout=120.0,
+            max_retries=3
+        ), "astron-code-latest"
 
     return None, None
 
