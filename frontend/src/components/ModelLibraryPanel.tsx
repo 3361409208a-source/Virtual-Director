@@ -32,13 +32,19 @@ export function ModelLibraryPanel() {
   const [aiPrompt, setAiPrompt]         = useState('');
   const [aiBaseModel, setAiBaseModel]   = useState<ModelMeta | null>(null);
   const [aiLlm, setAiLlm]              = useState('deepseek-chat');
-  const [aiModelPage, setAiModelPage]   = useState(0);
-  const AI_PAGE_SIZE = 5;
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiResult, setAiResult]         = useState<AIGenerateResult | null>(null);
   const [aiError, setAiError]           = useState('');
   const [aiLog, setAiLog]               = useState<string[]>([]);
+  const [aiLogCollapsed, setAiLogCollapsed] = useState(false);
   const logEndRef                       = useRef<HTMLDivElement>(null);
+
+  // Base model modal
+  const [showBaseModal, setShowBaseModal] = useState(false);
+  const [modalPage, setModalPage]         = useState(0);
+  const [modalFilter, setModalFilter]     = useState<'all' | 'builtin' | 'downloaded' | 'custom'>('all');
+  const [tempBaseModel, setTempBaseModel] = useState<ModelMeta | null>(null);
+  const MODAL_PAGE_SIZE = 6;
 
   const load = async () => {
     setLoading(true);
@@ -115,6 +121,7 @@ export function ModelLibraryPanel() {
           } else if (ev.step === 'done') {
             setAiResult(ev as unknown as AIGenerateResult);
             setAiLog(prev => [...prev, ev.msg]);
+            setAiLogCollapsed(true); // auto-collapse log after success
             load();
           } else if (ev.step === 'error') {
             setAiError(ev.msg);
@@ -266,51 +273,20 @@ export function ModelLibraryPanel() {
                 {/* Left: selector + prompt */}
                 <div className="ai-model-input-area">
 
-                  {/* Reference model selector */}
+                  {/* Reference model — modal trigger */}
                   <div className="ai-section-label">① 选择参考模型（可选）</div>
-                  <div className="ai-model-selector">
-                    <button
-                      className={`ai-base-none ${!aiBaseModel ? 'selected' : ''}`}
-                      onClick={() => setAiBaseModel(null)}
-                    >不选择</button>
-                    {models
-                      .slice(aiModelPage * AI_PAGE_SIZE, (aiModelPage + 1) * AI_PAGE_SIZE)
-                      .map(m => (
-                        <button
-                          key={m.id}
-                          className={`ai-base-chip ${aiBaseModel?.id === m.id ? 'selected' : ''}`}
-                          onClick={() => setAiBaseModel(aiBaseModel?.id === m.id ? null : m)}
-                          title={m.filename}
-                        >{m.name}</button>
-                      ))}
+                  <div className="ai-base-trigger" onClick={() => { setTempBaseModel(aiBaseModel); setModalFilter('all'); setModalPage(0); setShowBaseModal(true); }}>
+                    {aiBaseModel ? (
+                      <>
+                        <span className="ai-base-trigger-name">{aiBaseModel.name}</span>
+                        <span className="model-cat-badge" style={{ background: CAT_COLOR[aiBaseModel.category] + '22', color: CAT_COLOR[aiBaseModel.category] }}>
+                          {CAT_LABEL[aiBaseModel.category]}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="ai-base-trigger-placeholder">+ 点击选择参考模型</span>
+                    )}
                   </div>
-                  {/* Pagination */}
-                  {models.length > AI_PAGE_SIZE && (
-                    <div className="ai-model-pager">
-                      <button
-                        className="ai-pager-btn"
-                        onClick={() => setAiModelPage(p => Math.max(0, p - 1))}
-                        disabled={aiModelPage === 0}
-                      >‹</button>
-                      <span className="ai-pager-info">
-                        {aiModelPage * AI_PAGE_SIZE + 1}–{Math.min((aiModelPage + 1) * AI_PAGE_SIZE, models.length)}
-                        &nbsp;/&nbsp;{models.length}
-                      </span>
-                      <button
-                        className="ai-pager-btn"
-                        onClick={() => setAiModelPage(p => p + 1)}
-                        disabled={(aiModelPage + 1) * AI_PAGE_SIZE >= models.length}
-                      >›</button>
-                    </div>
-                  )}
-                  {aiBaseModel && (
-                    <div className="ai-base-selected">
-                      参考：<span>{aiBaseModel.name}</span>
-                      <span className="model-cat-badge" style={{ background: CAT_COLOR[aiBaseModel.category] + '22', color: CAT_COLOR[aiBaseModel.category], marginLeft: 4 }}>
-                        {CAT_LABEL[aiBaseModel.category]}
-                      </span>
-                    </div>
-                  )}
 
                   {/* LLM selector */}
                   <div className="ai-section-label">② 选择推理模型</div>
@@ -353,27 +329,30 @@ export function ModelLibraryPanel() {
                   {aiError && <div className="ai-model-error">❌ {aiError}</div>}
                 </div>
 
-                {/* Right: reasoning log + preview */}
+                {/* Right: reasoning log (collapsible) + preview */}
                 <div className="ai-model-right">
-                  {/* Reasoning log */}
+                  {/* Collapsible reasoning log */}
                   {(aiLog.length > 0 || aiGenerating) && (
-                    <div className="ai-log-panel">
-                      <div className="ai-log-title">
+                    <div className={`ai-log-panel ${aiLogCollapsed ? 'collapsed' : ''}`}>
+                      <div className="ai-log-header" onClick={() => setAiLogCollapsed(!aiLogCollapsed)}>
                         {aiGenerating && <span className="ai-spinner" style={{ width: 10, height: 10, borderWidth: 1.5, marginRight: 6 }} />}
-                        推理过程
+                        <span>推理过程</span>
+                        <span className="ai-log-toggle">{aiLogCollapsed ? '▼' : '▲'}</span>
                       </div>
-                      <div className="ai-log-body">
-                        {aiLog.map((line, i) => (
-                          <div key={i} className={`ai-log-line ${(line.startsWith('📝') || line.startsWith('💭')) ? 'thinking' : ''}`}>
-                            {line}
-                          </div>
-                        ))}
-                        <div ref={logEndRef} />
-                      </div>
+                      {!aiLogCollapsed && (
+                        <div className="ai-log-body">
+                          {aiLog.map((line, i) => (
+                            <div key={i} className={`ai-log-line ${(line.startsWith('📝') || line.startsWith('💭')) ? 'thinking' : ''}`}>
+                              {line}
+                            </div>
+                          ))}
+                          <div ref={logEndRef} />
+                        </div>
+                      )}
                     </div>
                   )}
 
-                  {/* Result preview */}
+                  {/* Result preview — stays visible after save */}
                   {aiResult && (
                     <div className="ai-result">
                       <div className="ai-result-viewer">
@@ -394,7 +373,7 @@ export function ModelLibraryPanel() {
                         </div>
                         <div className="ai-result-hint">💡 拖动旋转 · 滚轮缩放</div>
                         <div className="ai-result-actions">
-                          <button className="ai-save-btn" onClick={() => { setAiResult(null); setAiPrompt(''); setAiBaseModel(null); load(); }}>
+                          <button className="ai-save-btn" onClick={() => { load(); }}>
                             ✅ 保存到模型库
                           </button>
                           <button className="ai-delete-btn" onClick={handleAiDelete}>🗑 删除</button>
@@ -414,6 +393,89 @@ export function ModelLibraryPanel() {
                 </div>
               </div>
             )}
+
+            {/* ── Base Model Selection Modal ── */}
+            {showBaseModal && (() => {
+              const modalVisible = modalFilter === 'all' ? models : models.filter(m => m.category === modalFilter);
+              const modalPaged = modalVisible.slice(modalPage * MODAL_PAGE_SIZE, (modalPage + 1) * MODAL_PAGE_SIZE);
+              return (
+                <div className="base-model-modal-overlay" onClick={() => setShowBaseModal(false)}>
+                  <div className="base-model-modal" onClick={e => e.stopPropagation()}>
+                    <div className="base-model-modal-header">
+                      <h3>选择参考模型</h3>
+                      <button className="model-lib-close" onClick={() => setShowBaseModal(false)}>✕</button>
+                    </div>
+                    <div className="base-model-modal-body">
+                      <div className="base-model-modal-left">
+                        <div className="model-lib-tabs">
+                          {(['all', 'builtin', 'downloaded', 'custom'] as const).map(cat => (
+                            <button key={cat} className={`model-tab ${modalFilter === cat ? 'active' : ''}`}
+                              onClick={() => { setModalFilter(cat); setModalPage(0); }}>
+                              {cat === 'all' ? '全部' : CAT_LABEL[cat]}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="model-grid" style={{ padding: 10, gap: 8 }}>
+                          {modalPaged.map(m => (
+                            <div key={m.id} className={`model-card ${tempBaseModel?.id === m.id ? 'selected' : ''}`}
+                              onClick={() => setTempBaseModel(tempBaseModel?.id === m.id ? null : m)}>
+                              <div className="model-card-viewer" style={{ height: 90 }}>
+                                {/* @ts-ignore */}
+                                <model-viewer src={`http://localhost:8000${m.url}`} auto-rotate camera-controls shadow-intensity="1"
+                                  style={{ width: '100%', height: '100%', background: 'transparent' }} />
+                              </div>
+                              <div className="model-card-info" style={{ padding: '6px 8px' }}>
+                                <span className="model-card-name" title={m.filename}>{m.name}</span>
+                                <span className="model-cat-badge" style={{ background: CAT_COLOR[m.category] + '22', color: CAT_COLOR[m.category], fontSize: 9, padding: '1px 4px' }}>
+                                  {CAT_LABEL[m.category]}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        {modalVisible.length > MODAL_PAGE_SIZE && (
+                          <div className="lib-pager">
+                            <button className="ai-pager-btn" onClick={() => setModalPage(p => Math.max(0, p - 1))} disabled={modalPage === 0}>‹</button>
+                            <span className="ai-pager-info">
+                              {modalPage * MODAL_PAGE_SIZE + 1}–{Math.min((modalPage + 1) * MODAL_PAGE_SIZE, modalVisible.length)}
+                              &nbsp;/&nbsp;{modalVisible.length}
+                            </span>
+                            <button className="ai-pager-btn" onClick={() => setModalPage(p => p + 1)} disabled={(modalPage + 1) * MODAL_PAGE_SIZE >= modalVisible.length}>›</button>
+                          </div>
+                        )}
+                      </div>
+                      {tempBaseModel && (
+                        <div className="base-model-modal-preview">
+                          <div className="model-preview-viewer" style={{ flex: 1, minHeight: 0 }}>
+                            {/* @ts-ignore */}
+                            <model-viewer src={`http://localhost:8000${tempBaseModel.url}`} auto-rotate camera-controls shadow-intensity="1" exposure="1"
+                              style={{ width: '100%', height: '100%' }} />
+                          </div>
+                          <div className="model-preview-info" style={{ padding: '10px 12px' }}>
+                            <div className="model-preview-name">{tempBaseModel.name}</div>
+                            <div className="model-preview-details">
+                              <span className="model-cat-badge" style={{ background: CAT_COLOR[tempBaseModel.category] + '22', color: CAT_COLOR[tempBaseModel.category] }}>
+                                {CAT_LABEL[tempBaseModel.category]}
+                              </span>
+                              <span className="model-size">{tempBaseModel.size_kb} KB</span>
+                            </div>
+                            <div className="model-preview-filename">{tempBaseModel.filename}</div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="base-model-modal-footer">
+                      <button className="ai-base-none" style={{ padding: '8px 16px' }} onClick={() => { setTempBaseModel(null); }}>
+                        不选择
+                      </button>
+                      <button className="ai-generate-btn" style={{ padding: '8px 24px' }} onClick={() => { setAiBaseModel(tempBaseModel); setShowBaseModal(false); }}>
+                        确认选择
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}
