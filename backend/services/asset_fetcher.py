@@ -459,7 +459,7 @@ _FALLBACK_CATALOG: dict[str, tuple[str, str]] = {
     "airliner":     ("FlightHelmet",     _HELM),
     "fighter":      ("FlightHelmet",     _HELM),
     "bomber":       ("FlightHelmet",     _HELM),
-    "helicopter":   ("FlightHelmet",     _HELM),
+    # helicopter removed: FlightHelmet URL 404, let it fallback to composite
     "rocket":       ("RiggedFigure",     _FIG),
     # ── Characters ────────────────────────────────────────────────────────────
     "human":        ("CesiumMan",        _MAN),
