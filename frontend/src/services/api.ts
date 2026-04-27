@@ -59,6 +59,30 @@ export async function deleteCustomModel(filename: string): Promise<void> {
   await fetch(`${API_BASE}/models/custom/${filename}`, { method: 'DELETE' });
 }
 
+export interface AIGenerateResult {
+  ok: boolean;
+  filename: string;
+  model_name: string;
+  description: string;
+  parts_count: number;
+  size_kb: number;
+  url: string;
+  parts: object[];
+}
+
+export async function aiGenerateModel(prompt: string, model = 'deepseek-chat'): Promise<AIGenerateResult> {
+  const res = await fetch(`${API_BASE}/models/ai-generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt, model }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { detail?: string }).detail ?? '生成失败');
+  }
+  return res.json();
+}
+
 export function modelFileUrl(category: string, filename: string): string {
   return `${API_BASE}/models/${category}/${filename}`;
 }

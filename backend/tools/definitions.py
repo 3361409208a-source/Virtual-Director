@@ -306,3 +306,74 @@ asset_tool: dict = {
         }
     }
 }
+
+# ── AI Model Tool ─────────────────────────────────────────────────────────────
+# Build a single standalone 3D model from natural language description.
+# Returns a list of primitive parts that get assembled into a GLB file.
+
+ai_model_tool: dict = {
+    "type": "function",
+    "function": {
+        "name": "build_model",
+        "description": (
+            "根据自然语言描述，用 box/sphere/cylinder 基本体拼装一个 3D 模型。"
+            "输出每个零件的形状、尺寸、位置、旋转和颜色。"
+            "所有零件合并后就是这个模型的 GLB 文件。"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "model_name": {
+                    "type": "string",
+                    "description": "模型名称（英文 snake_case，如 red_robot）"
+                },
+                "description": {
+                    "type": "string",
+                    "description": "对模型的简短中文描述，用于展示"
+                },
+                "parts": {
+                    "type": "array",
+                    "description": "构成该模型的所有零件",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name":  {"type": "string",  "description": "零件名称，如 torso/head/wheel_fl"},
+                            "shape": {"type": "string",  "enum": ["box", "sphere", "cylinder"],
+                                      "description": "基本体形状"},
+                            "size": {
+                                "type": "object",
+                                "properties": {
+                                    "x": {"type": "number"}, "y": {"type": "number"}, "z": {"type": "number"}
+                                },
+                                "description": "零件包围盒尺寸（米）"
+                            },
+                            "position": {
+                                "type": "object",
+                                "properties": {
+                                    "x": {"type": "number"}, "y": {"type": "number"}, "z": {"type": "number"}
+                                },
+                                "description": "零件中心在模型本地坐标系中的位置（米），Y=0 为模型底部"
+                            },
+                            "rotation": {
+                                "type": "object",
+                                "properties": {
+                                    "x": {"type": "number"}, "y": {"type": "number"}, "z": {"type": "number"}
+                                },
+                                "description": "零件旋转（欧拉角，度）"
+                            },
+                            "color": {
+                                "type": "object",
+                                "properties": {
+                                    "r": {"type": "number"}, "g": {"type": "number"}, "b": {"type": "number"}
+                                },
+                                "description": "零件 RGB 颜色（0-1 浮点），如红色 r=1 g=0 b=0"
+                            }
+                        },
+                        "required": ["name", "shape", "size", "position", "color"]
+                    }
+                }
+            },
+            "required": ["model_name", "description", "parts"]
+        }
+    }
+}
