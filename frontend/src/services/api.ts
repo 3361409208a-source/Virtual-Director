@@ -28,6 +28,43 @@ export async function streamTestRender(
   }
 }
 
+// ── Model Library ──────────────────────────────────────────────────────────
+
+export interface ModelMeta {
+  id: string;
+  category: 'builtin' | 'downloaded' | 'custom';
+  filename: string;
+  name: string;
+  size_kb: number;
+  url: string;
+}
+
+export async function listModels(): Promise<ModelMeta[]> {
+  const res = await fetch(`${API_BASE}/models`);
+  if (!res.ok) throw new Error('获取模型列表失败');
+  const data = await res.json();
+  return data.models ?? [];
+}
+
+export async function uploadModel(file: File): Promise<ModelMeta> {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch(`${API_BASE}/models/upload`, { method: 'POST', body: form });
+  if (!res.ok) throw new Error('上传失败');
+  const d = await res.json();
+  return { id: `custom/${d.filename}`, category: 'custom', filename: d.filename, name: d.filename.replace('.glb',''), size_kb: d.size_kb, url: d.url };
+}
+
+export async function deleteCustomModel(filename: string): Promise<void> {
+  await fetch(`${API_BASE}/models/custom/${filename}`, { method: 'DELETE' });
+}
+
+export function modelFileUrl(category: string, filename: string): string {
+  return `${API_BASE}/models/${category}/${filename}`;
+}
+
+// ── Projects ───────────────────────────────────────────────────────────────
+
 export async function listProjects(): Promise<ProjectMeta[]> {
   const res = await fetch(`${API_BASE}/projects`);
   if (!res.ok) throw new Error('获取项目列表失败');

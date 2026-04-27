@@ -5,6 +5,7 @@ import { streamGenerate, streamTestRender, projectVideoUrl } from './services/ap
 import { ChatPanel } from './components/ChatPanel';
 import { VideoPlayer } from './components/VideoPlayer';
 import { ProjectPanel } from './components/ProjectPanel';
+import { ModelLibraryPanel } from './components/ModelLibraryPanel';
 
 const WELCOME: Message = {
   id: '0',
@@ -155,6 +156,7 @@ export default function App() {
           }
         }}
       />
+      <ModelLibraryPanel />
     </div>
   );
 }
