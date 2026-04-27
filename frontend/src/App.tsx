@@ -20,7 +20,7 @@ export default function App() {
   const [input, setInput]             = useState('');
   const [isRendering, setIsRendering] = useState(false);
   const [videoUrl, setVideoUrl]       = useState<string | null>(null);
-  const [model, setModel]             = useState<ModelSelection>('deepseek-v4-flash');
+  const [model, setModel]             = useState<ModelSelection>('deepseek-chat');
   const [renderer, setRenderer]       = useState<RendererSelection>('godot');
   const [isTesting, setIsTesting]     = useState(false);
   const [testMsg, setTestMsg]         = useState('');

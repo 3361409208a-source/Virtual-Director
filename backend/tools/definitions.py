@@ -214,6 +214,47 @@ physics_tool: dict = {
     },
 }
 
+# ── Asset Search Tool ────────────────────────────────────────────────────────────
+# Ask the LLM to decide which actors should be searched online and what queries to use.
+
+asset_search_tool: dict = {
+    "type": "function",
+    "function": {
+        "name": "plan_asset_searches",
+        "description": (
+            "为每个演员决定是否从开源3D模型库（Poly Pizza / Sketchfab）搜索现成的 GLB 模型。"
+            "提供英文搜索关键词，尽量简洁（1-3个词），例如 'red car', 'basketball', 'dragon'。"
+            "同时给出渲染时的目标缩放尺寸（米）。"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "searches": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "actor_id":    {"type": "string",  "description": "演员ID"},
+                            "query":       {"type": "string",  "description": "英文搜索关键词，如 'police car', 'basketball player'"},
+                            "target_size": {
+                                "type": "object",
+                                "properties": {
+                                    "x": {"type": "number"},
+                                    "y": {"type": "number"},
+                                    "z": {"type": "number"},
+                                },
+                                "description": "模型渲染目标尺寸（米），如人高1.8m → y=1.8",
+                            },
+                        },
+                        "required": ["actor_id", "query", "target_size"],
+                    },
+                },
+            },
+            "required": ["searches"],
+        },
+    },
+}
+
 # ── Asset Tool ───────────────────────────────────────────────────────────────────
 # AI decides search queries for each actor. The service then calls Poly Pizza API.
 # use_builtin=true  → skip download, use procedural primitive model (instant)
