@@ -2,12 +2,10 @@ import { useState } from 'react';
 import { flushSync } from 'react-dom';
 import type { Message, LogEntry } from './types';
 import { streamGenerate, streamTestRender, projectVideoUrl } from './services/api';
-import type { SceneDraft } from './services/api';
 import { ChatPanel } from './components/ChatPanel';
 import { VideoPlayer } from './components/VideoPlayer';
 import { ProjectPanel } from './components/ProjectPanel';
 import { ModelLibraryPanel } from './components/ModelLibraryPanel';
-import { SceneDraftPanel } from './components/SceneDraftPanel';
 
 const WELCOME: Message = {
   id: '0',
@@ -110,12 +108,6 @@ export default function App() {
     }
   };
 
-  const handleDraftConfirm = async (draft: SceneDraft) => {
-    setViewingDraft(null);
-    // TODO: Trigger rendering with confirmed draft
-    console.log('Draft confirmed:', draft);
-  };
-
   return (
     <div className="app-container">
       <ChatPanel
@@ -125,11 +117,13 @@ export default function App() {
         model={model}
         renderer={renderer}
         draftMode={draftMode}
+        draftId={viewingDraft}
         onInputChange={setInput}
         onSend={handleSend}
         onModelChange={setModel}
         onRendererChange={setRenderer}
         onDraftModeChange={setDraftMode}
+        onDraftClose={() => setViewingDraft(null)}
         isTesting={isTesting}
         testMsg={testMsg}
         onTestRender={async (r) => {
@@ -164,13 +158,6 @@ export default function App() {
         }}
       />
       <ModelLibraryPanel />
-      {viewingDraft && (
-        <SceneDraftPanel
-          draftId={viewingDraft}
-          onClose={() => setViewingDraft(null)}
-          onConfirm={handleDraftConfirm}
-        />
-      )}
     </div>
   );
 }

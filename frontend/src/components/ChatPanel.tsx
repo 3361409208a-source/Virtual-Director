@@ -14,11 +14,13 @@ interface Props {
   isTesting: boolean;
   testMsg: string;
   draftMode: boolean;
+  draftId: string | null;
   onInputChange: (val: string) => void;
   onSend: () => void;
   onModelChange: (m: ModelSelection) => void;
   onRendererChange: (r: RendererSelection) => void;
   onDraftModeChange: (enabled: boolean) => void;
+  onDraftClose: () => void;
   onTestRender: (r: RendererSelection) => void;
 }
 
@@ -31,7 +33,7 @@ const MODEL_LABELS: Record<ModelSelection, { short: string; desc: string; name: 
   'astron-code-latest': { short: 'ASTR', name: 'Astron Code',       desc: '阿里云 Maas · 代码生成专家' },
 };
 
-export function ChatPanel({ messages, input, isRendering, model, renderer, isTesting, testMsg, draftMode, onInputChange, onSend, onModelChange, onRendererChange, onDraftModeChange, onTestRender }: Props) {
+export function ChatPanel({ messages, input, isRendering, model, renderer, isTesting, testMsg, draftMode, draftId, onInputChange, onSend, onModelChange, onRendererChange, onDraftModeChange, onDraftClose, onTestRender }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [enableModelSearch, setEnableModelSearch] = useState(true);
 
@@ -135,6 +137,23 @@ export function ChatPanel({ messages, input, isRendering, model, renderer, isTes
         )}
         <div ref={bottomRef} />
       </div>
+
+      {draftId && (
+        <div className="scene-draft-panel glass-panel">
+          <div className="panel-header">
+            <h3>🎬 场景草稿审核</h3>
+            <button onClick={onDraftClose}>✕</button>
+          </div>
+          <div className="draft-info">
+            <div><strong>草稿ID：</strong>{draftId}</div>
+            <div><strong>状态：</strong>待审核</div>
+          </div>
+          <div className="draft-actions">
+            <button onClick={onDraftClose} className="btn-secondary">关闭</button>
+            <button className="btn-primary">确认并生成视频</button>
+          </div>
+        </div>
+      )}
 
       <div className="input-area">
         <input
