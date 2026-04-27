@@ -118,12 +118,12 @@ def _build_and_render(sequence: dict, mp4_path: str, progress_cb=None) -> None:
     # ── 1. Render settings (CYCLES CPU — headless-safe) ────────────────────
     scene.render.engine              = "CYCLES"
     scene.cycles.device              = "CPU"
-    scene.cycles.samples             = 4           # OIDN denoiser compensates
-    scene.cycles.use_denoising       = True
-    scene.cycles.denoiser            = "OPENIMAGEDENOISE"
+    scene.cycles.samples             = 32          # more samples, no denoiser noise
+    scene.cycles.use_denoising       = False       # skip OIDN — saves per-frame post cost
     scene.render.use_persistent_data = True        # reuse BVH/shaders across frames
-    scene.render.resolution_x        = 960
-    scene.render.resolution_y        = 540
+    scene.render.threads_mode        = "AUTO"      # use all CPU cores
+    scene.render.resolution_x        = 640         # 640x360 — 56% less pixels vs 960x540
+    scene.render.resolution_y        = 360
     scene.render.image_settings.file_format = "PNG"
     scene.render.image_settings.color_mode  = "RGB"
     # Frames written here; ffmpeg assembles MP4 after render

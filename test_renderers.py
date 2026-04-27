@@ -76,10 +76,15 @@ def test_godot():
     print("=" * 55)
     try:
         from backend.services.renderer import do_godot, do_ffmpeg
+        from backend.config import SEQUENCE_PATH
+        import json
+        avi_path = os.path.join(OUTPUT_DIR, "test_godot.avi")
         mp4_path = os.path.join(OUTPUT_DIR, "test_godot.mp4")
+        with open(SEQUENCE_PATH, "w", encoding="utf-8") as f:
+            json.dump(SEQUENCE, f, ensure_ascii=False, indent=2)
         t0 = time.time()
-        do_godot(SEQUENCE)
-        do_ffmpeg(mp4_path)
+        do_godot(avi_path)
+        do_ffmpeg(avi_path, mp4_path)
         _ok("Godot", time.time() - t0)
         print(f"  输出文件: {mp4_path}")
         return True

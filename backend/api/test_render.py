@@ -98,10 +98,15 @@ async def test_render(req: TestRenderRequest):
 
             else:
                 from backend.services.renderer import do_godot, do_ffmpeg
+                from backend.config import SEQUENCE_PATH, FRONTEND_PUBLIC_DIR
+                avi_path = os.path.join(FRONTEND_PUBLIC_DIR, "test_godot.avi")
+                import json as _j
+                with open(SEQUENCE_PATH, "w", encoding="utf-8") as f:
+                    _j.dump(TEST_SEQUENCE, f, ensure_ascii=False, indent=2)
                 yield _emit("testing", "🎮 [Godot] 启动引擎...")
-                await asyncio.to_thread(do_godot, TEST_SEQUENCE)
+                await asyncio.to_thread(do_godot, avi_path)
                 yield _emit("testing", "🎞️ [Godot] 合成 MP4...")
-                await asyncio.to_thread(do_ffmpeg, mp4_path)
+                await asyncio.to_thread(do_ffmpeg, avi_path, mp4_path)
 
             video_url = f"/api/test-video/{req.renderer}"
             yield _emit("test_done",
