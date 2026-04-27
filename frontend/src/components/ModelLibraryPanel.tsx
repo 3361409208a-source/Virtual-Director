@@ -25,6 +25,8 @@ export function ModelLibraryPanel() {
   const [loading, setLoading]     = useState(false);
   const [error, setError]         = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+  const [libPage, setLibPage]     = useState(0);
+  const LIB_PAGE_SIZE = 5;
 
   // AI modeling state
   const [aiPrompt, setAiPrompt]         = useState('');
@@ -129,6 +131,7 @@ export function ModelLibraryPanel() {
   };
 
   const visible = filter === 'all' ? models : models.filter(m => m.category === filter);
+  const pagedVisible = visible.slice(libPage * LIB_PAGE_SIZE, (libPage + 1) * LIB_PAGE_SIZE);
 
   const counts = {
     all:        models.length,
@@ -177,7 +180,8 @@ export function ModelLibraryPanel() {
             {tab === 'library' && (<>
               <div className="model-lib-tabs">
                 {(['all', 'builtin', 'downloaded', 'custom'] as const).map(cat => (
-                  <button key={cat} className={`model-tab ${filter === cat ? 'active' : ''}`} onClick={() => setFilter(cat)}>
+                  <button key={cat} className={`model-tab ${filter === cat ? 'active' : ''}`}
+                    onClick={() => { setFilter(cat); setLibPage(0); }}>
                     {cat === 'all' ? '全部' : CAT_LABEL[cat]}
                     <span className="model-tab-count">{counts[cat]}</span>
                   </button>
@@ -188,7 +192,7 @@ export function ModelLibraryPanel() {
               <div className="model-lib-body">
                 <div className="model-grid">
                   {visible.length === 0 && !loading && <div className="model-empty">暂无模型</div>}
-                  {visible.map(m => (
+                  {pagedVisible.map(m => (
                     <div key={m.id} className={`model-card ${preview?.id === m.id ? 'selected' : ''}`} onClick={() => setPreview(m)}>
                       <div className="model-card-viewer">
                         {/* @ts-ignore */}
@@ -208,6 +212,17 @@ export function ModelLibraryPanel() {
                     </div>
                   ))}
                 </div>
+                {/* Library pagination */}
+                {visible.length > LIB_PAGE_SIZE && (
+                  <div className="lib-pager">
+                    <button className="ai-pager-btn" onClick={() => setLibPage(p => Math.max(0, p - 1))} disabled={libPage === 0}>‹</button>
+                    <span className="ai-pager-info">
+                      {libPage * LIB_PAGE_SIZE + 1}–{Math.min((libPage + 1) * LIB_PAGE_SIZE, visible.length)}
+                      &nbsp;/&nbsp;{visible.length}
+                    </span>
+                    <button className="ai-pager-btn" onClick={() => setLibPage(p => p + 1)} disabled={(libPage + 1) * LIB_PAGE_SIZE >= visible.length}>›</button>
+                  </div>
+                )}
                 {preview && (
                   <div className="model-preview-panel">
                     <div className="model-preview-viewer">

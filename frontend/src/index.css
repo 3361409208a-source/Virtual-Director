@@ -1437,6 +1437,17 @@ video {
   color: #6e7681;
 }
 
+/* Library pagination */
+.lib-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
 /* Placeholder */
 .ai-placeholder {
   flex: 1;
