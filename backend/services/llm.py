@@ -174,8 +174,11 @@ def _extract_json(s: str) -> dict:
 
 
 
-def llm_call(system: str, user: str, tool: dict) -> dict:
-    """Single LLM call that enforces a specific function tool and returns parsed args."""
+def llm_call(system: str, user: str, tool: dict, token_cb=None) -> dict:
+    """Single LLM call that enforces a specific function tool and returns parsed args.
+    
+    token_cb: optional callable(str) called with each streamed token delta.
+    """
     selection = _model_var.get()
     
     client, model = _get_client_config(selection)
@@ -206,29 +209,59 @@ def llm_call(system: str, user: str, tool: dict) -> dict:
     for attempt in range(retries + 1):
         try:
             if supports_tools:
-                resp = client.chat.completions.create(
+                stream = client.chat.completions.create(
                     model=model,
                     messages=messages,
                     tools=[tool],
                     tool_choice={"type": "function", "function": {"name": tool["function"]["name"]}},
+                    stream=True,
                 )
-                tool_calls = resp.choices[0].message.tool_calls
-                if not tool_calls:
-                    content = resp.choices[0].message.content
-                    if content:
-                        try:
-                            return _extract_json(content)
-                        except Exception:
-                            pass
-                    raise RuntimeError(f"LLM did not return a tool call. Content: {content}")
-                
-                args_str = tool_calls[0].function.arguments
+                args_str = ""
+                _tool_call_id = None
+                _tool_call_name = None
+                for chunk in stream:
+                    delta = chunk.choices[0].delta if chunk.choices else None
+                    if not delta:
+                        continue
+                    if delta.tool_calls:
+                        tc = delta.tool_calls[0]
+                        if tc.id:
+                            _tool_call_id = tc.id
+                        if tc.function.name:
+                            _tool_call_name = tc.function.name
+                        frag = tc.function.arguments or ""
+                        if frag:
+                            args_str += frag
+                            if token_cb:
+                                try:
+                                    token_cb(frag)
+                                except Exception:
+                                    pass
+                    elif delta.content:
+                        args_str += delta.content
+                        if token_cb:
+                            try:
+                                token_cb(delta.content)
+                            except Exception:
+                                pass
+                if not args_str:
+                    raise RuntimeError("LLM did not return a tool call or content.")
             else:
-                resp = client.chat.completions.create(
+                stream = client.chat.completions.create(
                     model=model,
                     messages=messages,
+                    stream=True,
                 )
-                args_str = resp.choices[0].message.content
+                args_str = ""
+                for chunk in stream:
+                    delta = chunk.choices[0].delta if chunk.choices else None
+                    if delta and delta.content:
+                        args_str += delta.content
+                        if token_cb:
+                            try:
+                                token_cb(delta.content)
+                            except Exception:
+                                pass
 
             try:
                 parsed = _extract_json(args_str)

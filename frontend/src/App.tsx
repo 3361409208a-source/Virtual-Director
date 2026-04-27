@@ -67,12 +67,23 @@ export default function App() {
       await streamGenerate(input, event => {
         if (event.step === 'rendering') {
           updateLastEntry(logId, 'rendering', event.msg);
-        } else {
+        } else if (event.step !== 'stream') {
           appendEntry(logId, { step: event.step, msg: event.msg, ts: Date.now() });
         }
         setCurrentStep(event.step);
         setCurrentMsg(event.msg);
-        setStreamLog(prev => [...prev, event as unknown as Record<string, unknown>]);
+        setStreamLog(prev => {
+          const raw = event as unknown as Record<string, unknown>;
+          if (raw.step === 'stream') {
+            const last = prev[prev.length - 1];
+            if (last && last.step === 'stream' && last.agent === raw.agent) {
+              const updated = [...prev];
+              updated[updated.length - 1] = { ...last, msg: String(last.msg ?? '') + String(raw.msg ?? '') };
+              return updated;
+            }
+          }
+          return [...prev, raw];
+        });
         if (event.step === 'done') {
           if (event.video_url) setVideoUrl(event.video_url);
           setIsRendering(false);

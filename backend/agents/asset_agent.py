@@ -2,7 +2,7 @@ import os
 from backend.services.llm import llm_call
 from backend.tools.definitions import asset_tool
 
-def run_asset_agent(prompt: str, director: dict, progress_cb=None) -> dict:
+def run_asset_agent(prompt: str, director: dict, progress_cb=None, token_cb=None) -> dict:
     """
     Worker E: Decide 3D model source for each actor.
     Generates composite shapes if needed.
@@ -48,7 +48,7 @@ def run_asset_agent(prompt: str, director: dict, progress_cb=None) -> dict:
     _cb("⚡ 资产AI 正在分析并设计模型拼装图纸...")
     
     try:
-        result = llm_call(system, prompt, asset_tool)
+        result = llm_call(system, prompt, asset_tool, token_cb=token_cb)
         manifest_array = result.get("asset_manifest", [])
         
         # Convert array to dict keyed by actor_id

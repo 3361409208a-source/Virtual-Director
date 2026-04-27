@@ -57,6 +57,15 @@ function StreamLog({ events }: { events: Record<string, unknown>[] }) {
         const step = String(ev.step ?? '');
         const msg  = String(ev.msg ?? '');
         const extras = Object.entries(ev).filter(([k]) => !SKIP_KEYS.has(k));
+        if (step === 'stream') {
+          const agent = String(ev.agent ?? '');
+          return (
+            <div key={idx} className="stream-log-entry step-stream">
+              <span className="stream-log-step stream-agent">{agent}</span>
+              <span className="stream-log-token">{msg}</span>
+            </div>
+          );
+        }
         return (
           <div key={idx} className={`stream-log-entry step-${step}`}>
             <span className="stream-log-step">{step}</span>

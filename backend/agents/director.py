@@ -3,7 +3,7 @@ from backend.services.llm import llm_call
 from backend.tools.definitions import director_tool
 
 
-def run_director(prompt: str, scene_ctx: dict) -> dict:
+def run_director(prompt: str, scene_ctx: dict, token_cb=None) -> dict:
     """
     Phase 1: Analyze the user's prompt and decompose it into briefs for three
     worker agents (scene, actor, camera).  Also decides total duration and actor IDs.
@@ -28,4 +28,4 @@ def run_director(prompt: str, scene_ctx: dict) -> dict:
         "①核心视觉目标 ②关键时间节点（如 t=0s/t=3s/t=8s 发生什么）③具体坐标（如 从 z=0 加速到 z=-80）。\n\n"
         f"场景系统能力说明: {json.dumps(scene_ctx, ensure_ascii=False)}"
     )
-    return llm_call(system, prompt, director_tool)
+    return llm_call(system, prompt, director_tool, token_cb=token_cb)

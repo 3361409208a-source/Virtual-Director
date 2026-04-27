@@ -2,7 +2,7 @@ from backend.services.llm import llm_call
 from backend.tools.definitions import physics_tool
 
 
-def run_physics_agent(prompt: str, director: dict) -> dict:
+def run_physics_agent(prompt: str, director: dict, token_cb=None) -> dict:
     """
     Worker D: Decide which actors get Godot RigidBody3D physics.
     AI sets initial conditions only; Godot's physics engine handles trajectories.
@@ -33,4 +33,4 @@ def run_physics_agent(prompt: str, director: dict) -> dict:
         "If no rigid physics is needed, return physics_objects as empty list."
     )
 
-    return llm_call(system, prompt, physics_tool)
+    return llm_call(system, prompt, physics_tool, token_cb=token_cb)

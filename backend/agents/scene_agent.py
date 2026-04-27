@@ -3,7 +3,7 @@ from backend.services.llm import llm_call
 from backend.tools.definitions import scene_tool
 
 
-def run_scene_agent(prompt: str, director: dict, scene_ctx: dict) -> dict:
+def run_scene_agent(prompt: str, director: dict, scene_ctx: dict, token_cb=None) -> dict:
     """
     Worker A: Build the visual environment (sky, sun, fog, ground, props).
     Receives the director's scene_brief and the scene capability context.
@@ -31,4 +31,4 @@ def run_scene_agent(prompt: str, director: dict, scene_ctx: dict) -> dict:
         "【坐标约定】：主干道/跑道沿 Z 轴延伸，X 轴为左右，Y=0 为地面。\n"
         f"场景系统参数表: {json.dumps(scene_ctx.get('scene_setup_capabilities', {}), ensure_ascii=False)}"
     )
-    return llm_call(system, prompt, scene_tool)
+    return llm_call(system, prompt, scene_tool, token_cb=token_cb)

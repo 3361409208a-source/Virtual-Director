@@ -58,7 +58,32 @@ async def generate_video(req: PromptRequest):
             m = f"🎯 [总导演] 审读剧本，拆解分镜... (模型: {req.model})"
             _save("director", m)
             yield _emit("director", m)
-            director = await asyncio.to_thread(run_director, req.prompt, ctx)
+            # Token streaming relay for director (sequential — uses direct yield via queue)
+            _dir_token_q: asyncio.Queue = asyncio.Queue()
+            def _dir_token_cb(tok: str):
+                asyncio.run_coroutine_threadsafe(_dir_token_q.put(tok), asyncio.get_event_loop())
+
+            import threading
+            _dir_result: dict = {}
+            _dir_err: list = []
+            def _run_director_thread():
+                try:
+                    _dir_result['v'] = run_director(req.prompt, ctx, token_cb=_dir_token_cb)
+                except Exception as _e:
+                    _dir_err.append(_e)
+                finally:
+                    asyncio.run_coroutine_threadsafe(_dir_token_q.put(None), asyncio.get_event_loop())
+            threading.Thread(target=_run_director_thread, daemon=True).start()
+            _dir_buf = ''
+            while True:
+                tok = await _dir_token_q.get()
+                if tok is None:
+                    break
+                _dir_buf += tok
+                yield _emit('stream', tok, agent='director')
+            if _dir_err:
+                raise _dir_err[0]
+            director = _dir_result['v']
             meta = director["meta"]
             if isinstance(meta, str):
                 meta = json.loads(meta)
@@ -76,6 +101,14 @@ async def generate_video(req: PromptRequest):
             evt_q: asyncio.Queue = asyncio.Queue()
             loop = asyncio.get_running_loop()
 
+            def _make_token_cb(agent_name: str):
+                def _cb(tok: str):
+                    asyncio.run_coroutine_threadsafe(
+                        evt_q.put(("progress", "stream", tok, agent_name)),
+                        loop,
+                    )
+                return _cb
+
             async def _run(name: str, fn, *args):
                 try:
                     result = await asyncio.to_thread(fn, *args)
@@ -85,18 +118,17 @@ async def generate_video(req: PromptRequest):
                     traceback.print_exc()
                     await evt_q.put(("error", name, str(e)))
 
-
             def _asset_progress_cb(msg: str):
                 asyncio.run_coroutine_threadsafe(
                     evt_q.put(("progress", "asset_progress", f"📦 [美术资产] {msg}")),
                     loop,
                 )
 
-            asyncio.create_task(_run("scene",   run_scene_agent,   req.prompt, director, ctx))
-            asyncio.create_task(_run("actor",   run_actor_agent,   req.prompt, director, ctx))
-            asyncio.create_task(_run("camera",  run_camera_agent,  req.prompt, director))
-            asyncio.create_task(_run("physics", run_physics_agent, req.prompt, director))
-            asyncio.create_task(_run("asset",   run_asset_agent,   req.prompt, director, _asset_progress_cb))
+            asyncio.create_task(_run("scene",   run_scene_agent,   req.prompt, director, ctx, _make_token_cb("scene")))
+            asyncio.create_task(_run("actor",   run_actor_agent,   req.prompt, director, ctx, _make_token_cb("actor")))
+            asyncio.create_task(_run("camera",  run_camera_agent,  req.prompt, director,      _make_token_cb("camera")))
+            asyncio.create_task(_run("physics", run_physics_agent, req.prompt, director,      _make_token_cb("physics")))
+            asyncio.create_task(_run("asset",   run_asset_agent,   req.prompt, director, _asset_progress_cb, _make_token_cb("asset")))
 
             labels = {
                 "scene":   "🏗️ [场景美术]",
@@ -118,8 +150,12 @@ async def generate_video(req: PromptRequest):
                 elif etype == "error":
                     _, name, err_msg = event
                     raise RuntimeError(f"Worker {name} ({labels.get(name, name)}) failed: {err_msg}")
+                elif etype == "progress" and len(event) == 4 and event[1] == "stream":
+                    # Token streaming from worker agent: ("progress", "stream", tok, agent_name)
+                    _, _, tok, agent_name = event
+                    yield _emit("stream", tok, agent=agent_name)
                 else:
-                    _, step, msg = event
+                    _, step, msg = event[0:3]
                     _save(step, msg)
                     yield _emit(step, msg)
 

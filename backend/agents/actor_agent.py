@@ -2,7 +2,7 @@ from backend.services.llm import llm_call
 from backend.tools.definitions import actor_tool
 
 
-def run_actor_agent(prompt: str, director: dict, scene_ctx: dict) -> dict:
+def run_actor_agent(prompt: str, director: dict, scene_ctx: dict, token_cb=None) -> dict:
     """
     Worker B: Define actors and generate per-actor keyframe animation tracks.
     Must use the exact actor IDs provided by the director.
@@ -33,6 +33,6 @@ def run_actor_agent(prompt: str, director: dict, scene_ctx: dict) -> dict:
         "Limb joints: use sub_tracks to rotate composite parts locally.\n"
         "Common angles: raise arm=rotation.x 90; turn head=rotation.y 30; bow=torso rotation.x 20"
     )
-    return llm_call(system, prompt, actor_tool)
+    return llm_call(system, prompt, actor_tool, token_cb=token_cb)
 
 

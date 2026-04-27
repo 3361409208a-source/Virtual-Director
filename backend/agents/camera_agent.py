@@ -2,7 +2,7 @@ from backend.services.llm import llm_call
 from backend.tools.definitions import camera_tool
 
 
-def run_camera_agent(prompt: str, director: dict) -> dict:
+def run_camera_agent(prompt: str, director: dict, token_cb=None) -> dict:
     """
     Worker C: Plan camera shots using runtime-tracking modes.
     The camera controller in Godot reads actor positions every frame,
@@ -45,4 +45,4 @@ def run_camera_agent(prompt: str, director: dict) -> dict:
         "t=mid follow (chase) → t=climax orbit (impact)\n"
         "- Impact moment: switch to orbit or static_look with transition=cut, fov tighten by 10-15"
     )
-    return llm_call(system, prompt, camera_tool)
+    return llm_call(system, prompt, camera_tool, token_cb=token_cb)
