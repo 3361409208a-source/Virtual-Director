@@ -36,7 +36,7 @@ GLM_MODEL         = "GLM-4.7-Flash"
 # Optional: free API keys for model search/download
 # Poly Pizza: register at https://poly.pizza  (free, no credit card)
 # Sketchfab:  register at https://sketchfab.com/settings#api (free)
-POLYPIZZA_API_KEY  = os.environ.get("POLYPIZZA_API_KEY",  "945e0cf46c8246a6bf4ecff940bc0c49")
+POLYPIZZA_API_KEY  = os.environ.get("POLYPIZZA_API_KEY",  "")
 SKETCHFAB_API_KEY  = os.environ.get("SKETCHFAB_API_KEY",  "")
 
 SILICONFLOW_API_KEY  = os.environ.get("SILICONFLOW_API_KEY", "")

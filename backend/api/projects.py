@@ -12,11 +12,13 @@ def get_projects(limit: int = 50, offset: int = 0):
 
 @router.get("/projects/{pid}")
 def get_project_detail(pid: str):
-    """Get full project: meta + chat + sequence."""
+    """Get full project: meta + chat + sequence (meta fields flattened to top level)."""
     data = get_project(pid)
     if not data:
         return JSONResponse(status_code=404, content={"error": "Project not found"})
-    return data
+    # Flatten: merge meta dict into top level so frontend can access detail.id, detail.prompt etc.
+    flat = {**data.get("meta", {}), **{k: v for k, v in data.items() if k != "meta"}}
+    return flat
 
 @router.get("/projects/{pid}/video")
 def get_project_video(pid: str):
