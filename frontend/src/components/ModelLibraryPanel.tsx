@@ -36,6 +36,7 @@ export function ModelLibraryPanel() {
   const [aiResult, setAiResult]         = useState<AIGenerateResult | null>(null);
   const [aiError, setAiError]           = useState('');
   const [aiLog, setAiLog]               = useState<string[]>([]);
+  const [saving, setSaving]             = useState(false);
   const logEndRef                       = useRef<HTMLDivElement>(null);
 
   // Base model modal
@@ -351,8 +352,19 @@ export function ModelLibraryPanel() {
                         </div>
                         <div className="ai-result-hint">💡 拖动旋转 · 滚轮缩放</div>
                         <div className="ai-result-actions">
-                          <button className="ai-save-btn" onClick={() => { load(); }}>
-                            ✅ 保存到模型库
+                          <button
+                            className="ai-save-btn"
+                            disabled={saving}
+                            onClick={async () => {
+                              setSaving(true);
+                              try {
+                                await load();
+                              } finally {
+                                setSaving(false);
+                              }
+                            }}
+                          >
+                            {saving ? '⏳ 保存中...' : '✅ 保存到模型库'}
                           </button>
                           <button className="ai-delete-btn" onClick={handleAiDelete}>🗑 删除</button>
                         </div>

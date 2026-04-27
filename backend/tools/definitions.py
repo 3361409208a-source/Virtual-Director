@@ -288,7 +288,7 @@ asset_tool: dict = {
                                     "properties": {
                                         "name": {"type": "string", "description": "部件名称，用于动画控制"},
                                         "parent_name": {"type": "string", "description": "父部件名称。如果设置了，该部件的位置将相对于父部件坐标系。用于构建关节点（如手臂挂在身体上）。"},
-                                        "shape": {"type": "string", "enum": ["box", "sphere", "cylinder", "cone", "capsule"]},
+                                        "shape": {"type": "string", "enum": ["box", "sphere", "cylinder", "cone", "capsule", "lathe", "extrude"]},
                                         "size": VEC3,
                                         "position": {**VEC3, "description": "相对局部坐标"},
                                         "rotation": {**VEC3, "description": "欧拉角旋转（度）"},
@@ -317,8 +317,9 @@ ai_model_tool: dict = {
         "name": "build_model",
         "description": (
             "根据自然语言描述，用基本体拼装一个 3D 模型。"
-            "可用形状：box(长方体)、sphere(球体)、cylinder(圆柱)、cone(圆锥)、capsule(胶囊/圆角柱体)。"
-            "可用材质属性：颜色(RGBA)、金属度、粗糙度、自发光。"
+            "可用形状：box/sphere/cylinder/cone/capsule/lathe(旋转体)/extrude(挤出体)。"
+            "可用材质：颜色(RGBA)、金属度、粗糙度、自发光、程序化纹理。"
+            "可用操作：CSG布尔运算(subtract挖洞/intersect交集/union合并)。"
             "输出每个零件的形状、尺寸、位置、旋转、颜色和材质属性。"
             "所有零件合并后就是这个模型的 GLB 文件。"
         ),
@@ -340,14 +341,14 @@ ai_model_tool: dict = {
                         "type": "object",
                         "properties": {
                             "name":  {"type": "string",  "description": "零件名称，如 torso/head/hat_brim"},
-                            "shape": {"type": "string",  "enum": ["box", "sphere", "cylinder", "cone", "capsule"],
-                                      "description": "基本体形状：box=长方体, sphere=球体, cylinder=圆柱, cone=圆锥/锥形, capsule=胶囊(圆柱+半球端,适合人体躯干/肢体)"},
+                            "shape": {"type": "string",  "enum": ["box", "sphere", "cylinder", "cone", "capsule", "lathe", "extrude"],
+                                      "description": "形状：box=长方体, sphere=球体, cylinder=圆柱, cone=圆锥, capsule=胶囊, lathe=旋转体(轮廓绕Y轴旋转), extrude=挤出体(2D截面沿Z挤出)"},
                             "size": {
                                 "type": "object",
                                 "properties": {
                                     "x": {"type": "number"}, "y": {"type": "number"}, "z": {"type": "number"}
                                 },
-                                "description": "零件包围盒尺寸（米）"
+                                "description": "零件包围盒尺寸（米），lathe/extrude形状可省略"
                             },
                             "position": {
                                 "type": "object",
@@ -368,26 +369,65 @@ ai_model_tool: dict = {
                                 "properties": {
                                     "r": {"type": "number"}, "g": {"type": "number"}, "b": {"type": "number"}, "a": {"type": "number"}
                                 },
-                                "description": "零件 RGBA 颜色（0-1浮点），a为透明度(0=全透明,1=不透明,默认1)。如红色 r=1,g=0,b=0"
+                                "description": "零件 RGBA 颜色（0-1浮点），a为透明度(0=全透明,1=不透明,默认1)"
                             },
                             "metallic": {
                                 "type": "number",
-                                "description": "金属度 0-1（0=非金属如布料/皮肤, 1=纯金属如钢铁/黄金）。盔甲=0.8, 布料=0.0, 皮肤=0.0"
+                                "description": "金属度 0-1（0=非金属如布料/皮肤, 1=纯金属）。盔甲=0.8, 布料=0.0"
                             },
                             "roughness": {
                                 "type": "number",
-                                "description": "粗糙度 0-1（0=镜面光滑, 1=完全哑光）。丝绸=0.3, 金属=0.2, 布料=0.9, 皮肤=0.7"
+                                "description": "粗糙度 0-1（0=镜面, 1=哑光）。丝绸=0.3, 布料=0.9"
                             },
                             "emissive": {
                                 "type": "object",
                                 "properties": {
                                     "r": {"type": "number"}, "g": {"type": "number"}, "b": {"type": "number"},
-                                    "intensity": {"type": "number", "description": "发光强度倍数(0-5), 1=微光, 3=明亮"}
+                                    "intensity": {"type": "number", "description": "发光强度倍数(0-5)"}
                                 },
-                                "description": "自发光颜色+强度，用于灯/火焰/魔法效果。普通物体不要设置"
+                                "description": "自发光，用于灯/火焰/魔法。普通物体不设置"
+                            },
+                            "texture": {
+                                "type": "string",
+                                "enum": ["brick", "wood", "fabric", "metal_brush", "checker", "dragon_scale", "tile"],
+                                "description": "程序化纹理类型：brick=砖墙, wood=木纹, fabric=布纹, metal_brush=拉丝金属, checker=棋盘格, dragon_scale=龙鳞, tile=瓷砖"
+                            },
+                            "profile": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {"y": {"type": "number"}, "r": {"type": "number"}},
+                                    "description": "y=高度, r=半径"
+                                },
+                                "description": "lathe旋转体轮廓点列表[{y,r},...]，绕Y轴旋转生成花瓶/柱子/碗等"
+                            },
+                            "cross_section": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {"x": {"type": "number"}, "y": {"type": "number"}},
+                                    "description": "2D截面点"
+                                },
+                                "description": "extrude挤出体2D截面点列表[{x,y},...]，沿Z轴挤出"
+                            },
+                            "extrude_depth": {
+                                "type": "number",
+                                "description": "extrude挤出深度（米），默认0.5"
+                            },
+                            "csg": {
+                                "type": "object",
+                                "properties": {
+                                    "operation": {"type": "string", "enum": ["subtract", "intersect", "union"],
+                                                  "description": "subtract=从本零件挖去tool形状(挖洞), intersect=取交集, union=合并"},
+                                    "tool": {
+                                        "type": "object",
+                                        "description": "用于布尔运算的工具形状(与part同结构：shape/size/position/rotation)"
+                                    }
+                                },
+                                "description": "CSG布尔运算：从本零件中减去/交集/合并另一个形状。如拱门=box减去cylinder"
                             }
                         },
-                        "required": ["name", "shape", "size", "position", "color"]
+                        "required": ["name", "shape", "position", "color"]
                     }
                 }
             },
