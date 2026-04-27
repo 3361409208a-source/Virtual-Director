@@ -190,39 +190,41 @@ export function ModelLibraryPanel() {
               {error && <div className="model-lib-error">{error}</div>}
               {loading && <div className="model-lib-loading">加载中...</div>}
               <div className="model-lib-body">
-                <div className="model-grid">
-                  {visible.length === 0 && !loading && <div className="model-empty">暂无模型</div>}
-                  {pagedVisible.map(m => (
-                    <div key={m.id} className={`model-card ${preview?.id === m.id ? 'selected' : ''}`} onClick={() => setPreview(m)}>
-                      <div className="model-card-viewer">
-                        {/* @ts-ignore */}
-                        <model-viewer src={`http://localhost:8000${m.url}`} auto-rotate camera-controls shadow-intensity="1"
-                          style={{ width: '100%', height: '100%', background: 'transparent' }} />
-                      </div>
-                      <div className="model-card-info">
-                        <span className="model-card-name" title={m.filename}>{m.name}</span>
-                        <div className="model-card-meta">
-                          <span className="model-cat-badge" style={{ background: CAT_COLOR[m.category] + '22', color: CAT_COLOR[m.category] }}>{CAT_LABEL[m.category]}</span>
-                          <span className="model-size">{m.size_kb} KB</span>
+                <div className="model-lib-grid-col">
+                  <div className="model-grid">
+                    {visible.length === 0 && !loading && <div className="model-empty">暂无模型</div>}
+                    {pagedVisible.map(m => (
+                      <div key={m.id} className={`model-card ${preview?.id === m.id ? 'selected' : ''}`} onClick={() => setPreview(m)}>
+                        <div className="model-card-viewer">
+                          {/* @ts-ignore */}
+                          <model-viewer src={`http://localhost:8000${m.url}`} auto-rotate camera-controls shadow-intensity="1"
+                            style={{ width: '100%', height: '100%', background: 'transparent' }} />
                         </div>
+                        <div className="model-card-info">
+                          <span className="model-card-name" title={m.filename}>{m.name}</span>
+                          <div className="model-card-meta">
+                            <span className="model-cat-badge" style={{ background: CAT_COLOR[m.category] + '22', color: CAT_COLOR[m.category] }}>{CAT_LABEL[m.category]}</span>
+                            <span className="model-size">{m.size_kb} KB</span>
+                          </div>
+                        </div>
+                        {m.category === 'custom' && (
+                          <button className="model-delete-btn" onClick={e => { e.stopPropagation(); handleDelete(m); }} title="删除">✕</button>
+                        )}
                       </div>
-                      {m.category === 'custom' && (
-                        <button className="model-delete-btn" onClick={e => { e.stopPropagation(); handleDelete(m); }} title="删除">✕</button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                {/* Library pagination */}
-                {visible.length > LIB_PAGE_SIZE && (
-                  <div className="lib-pager">
-                    <button className="ai-pager-btn" onClick={() => setLibPage(p => Math.max(0, p - 1))} disabled={libPage === 0}>‹</button>
-                    <span className="ai-pager-info">
-                      {libPage * LIB_PAGE_SIZE + 1}–{Math.min((libPage + 1) * LIB_PAGE_SIZE, visible.length)}
-                      &nbsp;/&nbsp;{visible.length}
-                    </span>
-                    <button className="ai-pager-btn" onClick={() => setLibPage(p => p + 1)} disabled={(libPage + 1) * LIB_PAGE_SIZE >= visible.length}>›</button>
+                    ))}
                   </div>
-                )}
+                  {/* Library pagination — pinned at bottom of grid column */}
+                  {visible.length > LIB_PAGE_SIZE && (
+                    <div className="lib-pager">
+                      <button className="ai-pager-btn" onClick={() => setLibPage(p => Math.max(0, p - 1))} disabled={libPage === 0}>‹</button>
+                      <span className="ai-pager-info">
+                        {libPage * LIB_PAGE_SIZE + 1}–{Math.min((libPage + 1) * LIB_PAGE_SIZE, visible.length)}
+                        &nbsp;/&nbsp;{visible.length}
+                      </span>
+                      <button className="ai-pager-btn" onClick={() => setLibPage(p => p + 1)} disabled={(libPage + 1) * LIB_PAGE_SIZE >= visible.length}>›</button>
+                    </div>
+                  )}
+                </div>
                 {preview && (
                   <div className="model-preview-panel">
                     <div className="model-preview-viewer">

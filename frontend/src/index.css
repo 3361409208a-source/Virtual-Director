@@ -1071,6 +1071,15 @@ video {
   overflow: hidden;
 }
 
+/* Left column: grid + pager stacked */
+.model-lib-grid-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
 /* Grid */
 .model-grid {
   flex: 1;
@@ -1423,9 +1432,12 @@ video {
   flex-shrink: 0;
 }
 .lib-pager {
-  margin: 8px auto;
+  margin: 0 auto;
   border-radius: 12px;
   padding: 8px 18px;
+  border-top: 1px solid var(--border-color);
+  border-bottom: none;
+  background: rgba(255,255,255,0.02);
 }
 
 .ai-pager-btn {
