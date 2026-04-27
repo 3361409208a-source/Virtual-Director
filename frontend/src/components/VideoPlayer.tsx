@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 interface Props {
   videoUrl: string | null;
   isRendering: boolean;
   currentStep: string;
   currentMsg: string;
+  streamLog?: Record<string, unknown>[];
 }
 
 // ── Step metadata ────────────────────────────────────────────────────────────
@@ -40,6 +41,41 @@ const DIRECTOR_QUOTES = [
   '「GPU：这活儿比挖矿还累。导演：继续。」',
   '「场景已渲染 42 帧，离宇宙真理还差 83 帧。」',
 ];
+
+// ── Stream Log ───────────────────────────────────────────────────────────────
+const SKIP_KEYS = new Set(['step', 'msg']);
+
+function StreamLog({ events }: { events: Record<string, unknown>[] }) {
+  const bottomRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [events.length]);
+
+  return (
+    <div className="stream-log">
+      {events.map((ev, idx) => {
+        const step = String(ev.step ?? '');
+        const msg  = String(ev.msg ?? '');
+        const extras = Object.entries(ev).filter(([k]) => !SKIP_KEYS.has(k));
+        return (
+          <div key={idx} className={`stream-log-entry step-${step}`}>
+            <span className="stream-log-step">{step}</span>
+            <span className="stream-log-msg">{msg}</span>
+            {extras.map(([k, v]) => (
+              <div key={k} className="stream-log-field">
+                <span className="stream-log-key">{k}:</span>
+                <span className="stream-log-val">
+                  {typeof v === 'object' ? JSON.stringify(v, null, 0) : String(v)}
+                </span>
+              </div>
+            ))}
+          </div>
+        );
+      })}
+      <div ref={bottomRef} />
+    </div>
+  );
+}
 
 function RenderingOverlay({ step, msg }: { step: string; msg: string }) {
   const meta = STEP_META[step] ?? {
@@ -112,14 +148,17 @@ function RenderingOverlay({ step, msg }: { step: string; msg: string }) {
   );
 }
 
-export function VideoPlayer({ videoUrl, isRendering, currentStep, currentMsg }: Props) {
+export function VideoPlayer({ videoUrl, isRendering, currentStep, currentMsg, streamLog = [] }: Props) {
   return (
     <div className="glass-panel video-section">
       <div className="video-container">
         {videoUrl ? (
           <video src={videoUrl} controls autoPlay loop />
         ) : isRendering ? (
-          <RenderingOverlay step={currentStep} msg={currentMsg} />
+          <div className="rendering-split">
+            <RenderingOverlay step={currentStep} msg={currentMsg} />
+            <StreamLog events={streamLog} />
+          </div>
         ) : (
           <div className="placeholder-content">
             <div className="placeholder-icon">🎬</div>

@@ -713,14 +713,75 @@ video {
   display: block;
 }
 
+/* ── Rendering split: overlay top + stream log bottom ───────── */
+.rendering-split {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Stream Log ─────────────────────────────────────────────── */
+.stream-log {
+  flex: 1;
+  overflow-y: auto;
+  background: #1a1a2e;
+  padding: 10px 14px;
+  font-family: 'SF Mono', 'Fira Code', Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.6;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.stream-log-entry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 6px;
+  border-radius: 5px;
+  border-left: 2px solid transparent;
+}
+.stream-log-entry:last-child { border-left-color: #0af; background: rgba(0,170,255,0.06); }
+.stream-log-step {
+  color: #0af;
+  font-weight: 600;
+  min-width: 110px;
+  flex-shrink: 0;
+}
+.stream-log-msg {
+  color: #c9d1d9;
+  flex: 1;
+  word-break: break-word;
+}
+.stream-log-field {
+  width: 100%;
+  padding-left: 116px;
+  margin-top: 1px;
+}
+.stream-log-key { color: #7ee787; margin-right: 4px; }
+.stream-log-val {
+  color: #8b949e;
+  font-size: 10.5px;
+  word-break: break-all;
+  display: inline-block;
+  max-width: 90%;
+  vertical-align: top;
+  white-space: pre-wrap;
+}
+
 /* ── Render Overlay (Apple style) ──────────────────────────── */
 .render-overlay {
   width: 100%;
-  height: 100%;
+  height: 240px;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   background: #f2f2f7;
+  overflow: hidden;
 }
 
 .render-overlay-body {
