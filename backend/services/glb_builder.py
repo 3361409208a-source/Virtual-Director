@@ -852,122 +852,107 @@ def _euler_to_quat(rx_deg: float, ry_deg: float, rz_deg: float) -> list:
     ]
 
 
-def build_glb(parts: list[dict]) -> bytes:
-    """
-    Build a GLB binary from a list of part dicts.
-    Supports: box/sphere/cylinder/cone/capsule/lathe/extrude shapes,
-    CSG boolean operations, procedural textures, PBR materials.
-    Returns raw bytes ready to write to a .glb file.
-    """
-    gltf = pygltflib.GLTF2()
-    gltf.scene = 0
-    gltf.scenes = [pygltflib.Scene(nodes=[])]
-    gltf.asset = pygltflib.Asset(version="2.0", generator="VirtualDirector-GLBBuilder")
-
+def build_glb(parts: list[dict], fusion_mode: str = "auto") -> bytes:
+    """Build a GLB binary from a list of part dicts."""
+    gltf = pygltflib.GLTF2(
+        asset=pygltflib.Asset(generator="VirtualDirector-C4D-Engine"),
+        scenes=[pygltflib.Scene(nodes=[])]
+    )
     all_bin = bytearray()
-    print(f"[GLBBuilder] Building GLB with {len(parts)} parts")
 
-    def _add_accessor_f32(data: np.ndarray, atype: str) -> int:
+    def _add_accessor_f32(data, type_str):
         nonlocal all_bin
-        raw = data.astype(np.float32).tobytes()
-        bv_idx = len(gltf.bufferViews)
+        flat = np.array(data, dtype=np.float32).flatten().tobytes()
+        offset = len(all_bin)
+        all_bin.extend(flat)
+        while len(all_bin) % 4 != 0: all_bin.append(0)
+        acc = pygltflib.Accessor(
+            bufferView=len(gltf.bufferViews),
+            componentType=pygltflib.FLOAT,
+            count=len(data),
+            type=type_str,
+            max=np.max(data, axis=0).tolist() if len(data)>0 else None,
+            min=np.min(data, axis=0).tolist() if len(data)>0 else None,
+        )
         gltf.bufferViews.append(pygltflib.BufferView(
-            buffer=0, byteOffset=len(all_bin), byteLength=len(raw),
-            target=pygltflib.ARRAY_BUFFER,
+            buffer=0, byteOffset=offset, byteLength=len(flat), target=pygltflib.ARRAY_BUFFER
         ))
-        all_bin += raw
-        ac_idx = len(gltf.accessors)
-        mn = data.min(axis=0).tolist() if data.ndim > 1 else [float(data.min())]
-        mx = data.max(axis=0).tolist() if data.ndim > 1 else [float(data.max())]
-        gltf.accessors.append(pygltflib.Accessor(
-            bufferView=bv_idx, componentType=pygltflib.FLOAT,
-            count=len(data), type=atype,
-            min=mn, max=mx,
-        ))
-        return ac_idx
+        idx = len(gltf.accessors)
+        gltf.accessors.append(acc)
+        return idx
 
-    def _add_accessor_u16(data: np.ndarray) -> int:
+    def _add_accessor_u16(data):
         nonlocal all_bin
-        raw = data.astype(np.uint16).tobytes()
-        bv_idx = len(gltf.bufferViews)
+        flat = np.array(data, dtype=np.uint16).tobytes()
+        offset = len(all_bin)
+        all_bin.extend(flat)
+        while len(all_bin) % 4 != 0: all_bin.append(0)
+        acc = pygltflib.Accessor(
+            bufferView=len(gltf.bufferViews),
+            componentType=pygltflib.UNSIGNED_SHORT,
+            count=len(data),
+            type=pygltflib.SCALAR,
+        )
         gltf.bufferViews.append(pygltflib.BufferView(
-            buffer=0, byteOffset=len(all_bin), byteLength=len(raw),
-            target=pygltflib.ELEMENT_ARRAY_BUFFER,
+            buffer=0, byteOffset=offset, byteLength=len(flat), target=pygltflib.ELEMENT_ARRAY_BUFFER
         ))
-        all_bin += raw
-        ac_idx = len(gltf.accessors)
-        gltf.accessors.append(pygltflib.Accessor(
-            bufferView=bv_idx, componentType=pygltflib.UNSIGNED_SHORT,
-            count=len(data), type=pygltflib.SCALAR,
-            min=[int(data.min())], max=[int(data.max())],
-        ))
-        return ac_idx
+        idx = len(gltf.accessors)
+        gltf.accessors.append(acc)
+        return idx
 
-    def _add_image(png_bytes: bytes) -> int:
-        """Add a PNG image to the glTF, return image index."""
+    def _add_image(png_data):
         nonlocal all_bin
+        offset = len(all_bin)
+        all_bin.extend(png_data)
+        while len(all_bin) % 4 != 0: all_bin.append(0)
         img_idx = len(gltf.images)
-        bv_idx = len(gltf.bufferViews)
-        gltf.bufferViews.append(pygltflib.BufferView(
-            buffer=0, byteOffset=len(all_bin), byteLength=len(png_bytes),
-        ))
-        all_bin += png_bytes
-        gltf.images.append(pygltflib.Image(
-            bufferView=bv_idx, mimeType="image/png",
-        ))
+        gltf.images.append(pygltflib.Image(bufferView=len(gltf.bufferViews), mimeType="image/png"))
+        gltf.bufferViews.append(pygltflib.BufferView(buffer=0, byteOffset=offset, byteLength=len(png_data)))
         return img_idx
 
-    def _generate_uvs_box(sx, sy, sz, n_verts=24):
-        """Generate UV coords for a box mesh (6 faces × 4 verts)."""
-        uvs = []
-        # front/back: map XZ
-        for _ in range(8):
-            pass
-        # Simplified: each face gets 0-1 UV
-        for face in range(6):
-            uvs += [[0,0],[1,0],[1,1],[0,1]]
-        return np.array(uvs[:n_verts], dtype=np.float32)
+    # ─── 1. Attempt Mesh Fusion (C4D Style) ───
+    is_organic = any(p.get("shape") in ["blob", "deformed"] or "body" in p.get("name","").lower() for p in parts)
+    do_fusion = (fusion_mode == "voxel") or (fusion_mode == "auto" and is_organic and len(parts) > 5)
 
-    def _generate_uvs_sphere(n_rings, n_segs):
-        """Generate UV coords for sphere mesh."""
-        uvs = []
-        for i in range(n_rings + 1):
-            v = i / n_rings
-            for j in range(n_segs):
-                u = j / n_segs
-                uvs.append([u, v])
-        return np.array(uvs, dtype=np.float32)
+    if do_fusion:
+        print(f"[C4D-Engine] Global Fusion: {len(parts)} parts...")
+        fusion_meshes = []
+        for p in parts:
+            try:
+                tm = _part_to_trimesh(p)
+                if tm and not tm.is_empty: fusion_meshes.append(tm)
+            except Exception as e: print(f"Part prep failed: {e}")
+        
+        if fusion_meshes:
+            try:
+                final_mesh = trimesh.util.concatenate(fusion_meshes)
+                # Remeshing logic
+                final_mesh = trimesh.voxel.ops.matrix_to_marching_cubes(final_mesh.voxelized(pitch=0.03).matrix, pitch=0.03)
+                final_mesh.filter_humphrey()
+                
+                v = np.ascontiguousarray(final_mesh.vertices, dtype=np.float32)
+                i = np.ascontiguousarray(final_mesh.faces.flatten(), dtype=np.uint16)
+                p_acc = _add_accessor_f32(v, pygltflib.VEC3)
+                i_acc = _add_accessor_u16(i)
+                mat_idx = len(gltf.materials)
+                gltf.materials.append(pygltflib.Material(name="FusedMat", pbrMetallicRoughness=pygltflib.PbrMetallicRoughness(baseColorFactor=[0.8,0.8,0.8,1], metallicFactor=0.2, roughnessFactor=0.6)))
+                gltf.meshes.append(pygltflib.Mesh(primitives=[pygltflib.Primitive(attributes=pygltflib.Attributes(POSITION=p_acc), indices=i_acc, material=mat_idx)]))
+                gltf.nodes.append(pygltflib.Node(mesh=0))
+                gltf.scenes[0].nodes.append(0)
+                gltf.buffers = [pygltflib.Buffer(byteLength=len(all_bin))]
+                gltf.set_binary_blob(bytes(all_bin))
+                return b"".join(gltf.save_to_bytes())
+            except Exception as e:
+                print(f"[C4D-Engine] Fusion engine failed, falling back to classic mode: {e}")
 
-    def _generate_uvs_cylinder(n_segs):
-        """Generate UV coords for cylinder mesh (simplified)."""
-        # Side verts (top+bot), cap center, cap ring × 2
-        n_side = n_segs * 2
-        n_cap = n_segs + 1
-        uvs = []
-        # Side
-        for i in range(n_segs):
-            u = i / n_segs
-            uvs += [[u, 1], [u, 0]]
-        # Top cap center
-        uvs += [[0.5, 0.5]]
-        # Top cap ring
-        for i in range(n_segs):
-            a = 2 * math.pi * i / n_segs
-            uvs += [[0.5 + 0.5 * math.cos(a), 0.5 + 0.5 * math.sin(a)]]
-        # Bot cap center
-        uvs += [[0.5, 0.5]]
-        # Bot cap ring
-        for i in range(n_segs):
-            a = 2 * math.pi * i / n_segs
-            uvs += [[0.5 + 0.5 * math.cos(a), 0.5 + 0.5 * math.sin(a)]]
-        return np.array(uvs, dtype=np.float32)
-
-    for part in parts:
-        shape    = str(part.get("shape", "box")).lower()
-        size     = part.get("size", {})
-        pos      = part.get("position", {})
-        rot      = part.get("rotation", {})
-        color    = part.get("color", {"r": 0.7, "g": 0.7, "b": 0.7})
+    # ─── 2. Classic Assembly (Scattered) ───
+    for p_idx, part in enumerate(parts):
+        name = part.get("name", f"part_{p_idx}")
+        shape = str(part.get("shape", "box")).lower()
+        size = part.get("size", {"x": 1, "y": 1, "z": 1})
+        pos = part.get("position", {"x": 0, "y": 0, "z": 0})
+        rot = part.get("rotation", {"x": 0, "y": 0, "z": 0})
+        color = part.get("color", {"r": 0.7, "g": 0.7, "b": 0.7})
         name     = str(part.get("name", "part"))
         tex_type = part.get("texture", None)
 

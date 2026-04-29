@@ -24,10 +24,10 @@ def do_godot(avi_path: str) -> None:
 def do_ffmpeg(avi_path: str, mp4_path: str, cover_path: str = None) -> None:
     """Convert AVI to H.264 MP4, optionally prepending a cover image."""
     if cover_path and os.path.exists(cover_path):
-        # Prepend 2 seconds of cover image AND set it as metadata thumbnail
+        # Prepend 0.5 seconds of cover image AND set it as metadata thumbnail
         cmd = [
             "ffmpeg", "-y",
-            "-loop", "1", "-t", "2", "-i", cover_path,
+            "-loop", "1", "-t", "0.5", "-i", cover_path,
             "-i", avi_path,
             "-i", cover_path, # 3rd input for metadata
             "-filter_complex", 

@@ -1,7 +1,8 @@
 import { useRef, useEffect, useState } from 'react';
 import type { Message } from '../types';
 import { WorkflowLog } from './WorkflowLog';
-import { getConfig, updateConfig } from '../services/api';
+import { IconMagic } from './Icons';
+import { getConfig, updateConfig, optimizePrompt } from '../services/api';
 import type { ModelSelection, RendererSelection } from '../App';
 
 interface Props {
@@ -36,12 +37,13 @@ const IconDownload = () => <svg width="14" height="14" viewBox="0 0 24 24" fill=
 const IconUpload = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>;
 const IconDirector = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>;
 const IconSearch = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>;
-const IconBox = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>;
+const IconBox = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="M12 22V12"/></svg>;
 const IconTest = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 2v7.5"/><path d="M14 2v7.5"/><path d="M8.5 2h7"/><path d="M14 22H10c-1.1 0-2-.9-2-2V9.5C8 8.12 9.12 7 10.5 7h3c1.38 0 2.5 1.12 2.5 2.5V20c0 1.1-.9 2-2 2z"/></svg>;
 
 export function ChatPanel({ messages, input, isRendering, model, renderer, isTesting, testMsg, onInputChange, onSend, onModelChange, onRendererChange, onTestRender, currentTokens }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [enableModelSearch, setEnableModelSearch] = useState(true);
+  const [isOptimizing, setIsOptimizing] = useState(false);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -75,6 +77,19 @@ export function ChatPanel({ messages, input, isRendering, model, renderer, isTes
       </span>
     </span>
   ) : null;
+
+  const handleOptimize = async () => {
+    if (!input.trim() || isOptimizing) return;
+    setIsOptimizing(true);
+    try {
+      const optimized = await optimizePrompt(input, 'director');
+      onInputChange(optimized);
+    } catch (err) {
+      console.error('Failed to optimize prompt:', err);
+    } finally {
+      setIsOptimizing(false);
+    }
+  };
 
   return (
     <div className="glass-panel chat-section">
@@ -157,6 +172,14 @@ export function ChatPanel({ messages, input, isRendering, model, renderer, isTes
       </div>
 
       <div className="input-area">
+        <button 
+          className={`magic-btn ${isOptimizing ? 'spinning' : ''}`} 
+          onClick={handleOptimize} 
+          disabled={isRendering || isOptimizing || !input.trim()}
+          title="专家魔法棒：优化当前提示词"
+        >
+          <IconMagic />
+        </button>
         <input
           type="text"
           placeholder="输入导演意图..."
@@ -165,7 +188,7 @@ export function ChatPanel({ messages, input, isRendering, model, renderer, isTes
           onKeyDown={e => e.key === 'Enter' && onSend()}
           disabled={isRendering}
         />
-        <button onClick={onSend} disabled={isRendering}>
+        <button className="send-btn" onClick={onSend} disabled={isRendering || isOptimizing}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="22" y1="2" x2="11" y2="13" />
             <polygon points="22 2 15 22 11 13 2 9 22 2" />

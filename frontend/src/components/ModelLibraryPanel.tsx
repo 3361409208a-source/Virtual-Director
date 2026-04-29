@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import type { ModelMeta } from '../services/api';
-import { listModels, uploadModel, deleteCustomModel } from '../services/api';
+import { listModels, uploadModel, deleteCustomModel, optimizePrompt } from '../services/api';
 import { ThreeModelPreview } from './ThreeModelPreview';
 import { modelingStore } from '../services/modelingStore';
 
-import { IconSparkles, IconBox, IconTrash, IconChevronDown, IconChevronUp, IconPlus, IconUpload, IconTerminal, IconClose, IconError, IconEye } from './Icons';
+import { IconSparkles, IconBox, IconTrash, IconChevronDown, IconChevronUp, IconPlus, IconUpload, IconTerminal, IconClose, IconError, IconEye, IconMagic } from './Icons';
 
 const CAT_LABEL: Record<string, string> = {
   builtin:    '内置',
@@ -33,6 +33,7 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
   const [pageSize, setPageSize]   = useState(12);
   const [showTemp, setShowTemp]   = useState(false);
   const [previewPreset] = useState<any>('studio');
+  const [isOptimizing, setIsOptimizing] = useState(false);
   
   // Resizable split state
   const [splitWidth, setSplitWidth] = useState(window.innerWidth * 0.65); // Default ~70% for right panel
@@ -113,6 +114,19 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
   const handleAiGenerate = async () => {
     if (!aiPrompt.trim() || aiGenerating) return;
     modelingStore.startGenerate(aiPrompt, aiLlm, aiBaseModel?.name);
+  };
+
+  const handleOptimize = async () => {
+    if (!aiPrompt.trim() || isOptimizing) return;
+    setIsOptimizing(true);
+    try {
+      const optimized = await optimizePrompt(aiPrompt, 'modeling');
+      setAiPrompt(optimized);
+    } catch (err) {
+      console.error('Failed to optimize prompt:', err);
+    } finally {
+      setIsOptimizing(false);
+    }
   };
 
   // Scroll log to bottom when it updates
@@ -317,13 +331,36 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
               </div>
 
               <div className="ai-section-label">③ 描述你的建模需求</div>
-              <textarea className="ai-model-textarea" 
-                placeholder="描述外观、颜色、零件构成…（支持 Ctrl+Enter 快速启动）" 
-                value={aiPrompt} 
-                onChange={e => setAiPrompt(e.target.value)} 
-                onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleAiGenerate(); }}
-                rows={4} 
-              />
+              <div className="ai-input-wrapper" style={{ position: 'relative' }}>
+                <textarea className="ai-model-textarea" 
+                  placeholder="描述外观、颜色、零件构成…（支持 Ctrl+Enter 快速启动）" 
+                  value={aiPrompt} 
+                  onChange={e => setAiPrompt(e.target.value)} 
+                  onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleAiGenerate(); }}
+                  rows={4} 
+                  style={{ width: '100%', paddingLeft: 40 }}
+                />
+                <button 
+                  className={`ai-magic-btn ${isOptimizing ? 'spinning' : ''}`}
+                  onClick={handleOptimize}
+                  disabled={aiGenerating || isOptimizing || !aiPrompt.trim()}
+                  title="专家魔法棒：优化当前建模描述"
+                  style={{
+                    position: 'absolute',
+                    left: 10,
+                    top: 10,
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--accent-color)',
+                    cursor: 'pointer',
+                    opacity: aiPrompt.trim() ? 1 : 0.4,
+                    transition: 'all 0.2s',
+                    zIndex: 2
+                  }}
+                >
+                  <IconMagic />
+                </button>
+              </div>
               <button className="ai-generate-btn" onClick={handleAiGenerate} disabled={aiGenerating || !aiPrompt.trim()}>
                 {aiGenerating ? <><span className="ai-spinner" /> AI 建模中…</> : <><IconSparkles /> 启动深度建模引擎</>}
               </button>
@@ -369,7 +406,7 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
                 <div className="ai-placeholder">
                   <div className="ai-placeholder-icon"><IconBox /></div>
                   <div>描述你的需求并点击生成</div>
-                  </div>
+                </div>
               )}
 
               <div className={`ai-log-panel ${logCollapsed ? 'collapsed' : ''}`}>
@@ -387,9 +424,41 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
                   </button>
                 </div>
                 <div className="ai-log-body">
-                  {aiLog.map((line, i) => (
+                  {/* 💭 思考过程保留，但过滤掉原始 JSON 数据，代之以结构化展示 */}
+                  {aiLog.filter(line => !line.includes('"shape"') && !line.includes('shape:')).map((line, i) => (
                     <div key={i} className={`ai-log-line ${line.startsWith('💭') ? 'thinking' : ''}`}>{line}</div>
                   ))}
+                  
+                  {/* 🛠️ 结构化零件清单 (类似 C4D 对象管理器) */}
+                  {mState.parts.length > 0 && (
+                    <div className="parts-inventory">
+                      <div className="parts-inventory-header">
+                        <span>📦 零件装配清单</span>
+                        <span className="parts-count-tag">{mState.parts.length} items</span>
+                      </div>
+                      <div className="parts-grid">
+                        {mState.parts.map((p, idx) => (
+                          <div key={idx} className="part-item-card" title={`${p.name || '未命名'}\n形状: ${p.shape || p.type}\n材质: 金属度 ${p.metallic || 0}`}>
+                            <div className="part-icon">
+                              {p.shape === 'sphere' ? '⚪' : (p.shape === 'cylinder' ? '▮' : '🧊')}
+                            </div>
+                            <div className="part-info">
+                              <div className="part-name">{p.name || `零件_${idx}`}</div>
+                              <div className="part-meta">
+                                <span className="part-chip">{p.shape || p.type}</span>
+                                {p.metallic > 0.5 && <span className="part-chip metal">金属</span>}
+                              </div>
+                            </div>
+                            <div className="part-color-preview" style={{ background: `rgb(${(p.color?.r || 0.7)*255}, ${(p.color?.g || 0.7)*255}, ${(p.color?.b || 0.7)*255})` }} />
+                          </div>
+                        ))}
+                        {aiGenerating && <div className="part-item-card printing">
+                          <div className="part-icon">✨</div>
+                          <div className="part-info">正在打印新零件...</div>
+                        </div>}
+                      </div>
+                    </div>
+                  )}
                   <div ref={logEndRef} />
                 </div>
               </div>

@@ -369,7 +369,39 @@ body {
 }
 
 
-.input-area button {
+.input-area button.magic-btn {
+  background: none;
+  border: 1px solid var(--border-color);
+  width: 40px;
+  color: var(--accent-color);
+  border-radius: 12px;
+  transition: all 0.2s;
+}
+.input-area button.magic-btn:hover:not(:disabled) {
+  background: rgba(88, 166, 255, 0.1);
+  border-color: var(--accent-color);
+}
+.input-area button.magic-btn.spinning svg {
+  animation: magic-spin 1.5s linear infinite;
+}
+
+@keyframes magic-spin {
+  from { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(180deg) scale(1.2); }
+  to { transform: rotate(360deg) scale(1); }
+}
+
+.ai-magic-btn.spinning svg {
+  animation: magic-spin 1.5s linear infinite;
+}
+
+.ai-magic-btn:hover:not(:disabled) {
+  transform: scale(1.1);
+  color: #fff !important;
+  text-shadow: 0 0 8px var(--accent-color);
+}
+
+.input-area button.send-btn {
   background: var(--accent-color);
   border: none;
   width: 44px;

@@ -136,6 +136,17 @@ export function projectVideoUrl(pid: string): string {
   return `${API_BASE}/projects/${pid}/video`;
 }
 
+export async function optimizePrompt(prompt: string, context: 'director' | 'modeling' = 'director'): Promise<string> {
+  const res = await fetch(`${API_BASE}/optimize-prompt`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt, context }),
+  });
+  if (!res.ok) return prompt;
+  const d = await res.json();
+  return d.optimized || prompt;
+}
+
 // ── Config ─────────────────────────────────────────────────────────────────
 
 export interface Config {

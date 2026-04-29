@@ -45,7 +45,7 @@ export interface ProjectMeta {
 }
 
 export interface ProjectDetail extends ProjectMeta {
-  chat: LogEntry[];
+  chat_history: LogEntry[];
   sequence?: SceneSequence;
 }
 

@@ -365,8 +365,15 @@ export function ThreeModelPreview({ url, parts, backgroundColor = '#0d1117', pre
 
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(p.position?.x || 0, p.position?.y || 0, p.position?.z || 0);
+      
       if (p.rotation) {
-        mesh.rotation.set(p.rotation.x || 0, p.rotation.y || 0, p.rotation.z || 0);
+        // 核心修复：将 AI 输出的角度（Degrees）转换为 Three.js 要求的弧度（Radians）
+        const degToRad = Math.PI / 180;
+        mesh.rotation.set(
+          (p.rotation.x || 0) * degToRad,
+          (p.rotation.y || 0) * degToRad,
+          (p.rotation.z || 0) * degToRad
+        );
       }
       mesh.castShadow = true;
       mesh.receiveShadow = true;

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { Message, LogEntry, SceneSequence } from './types';
-import { streamGenerate, streamTestRender, projectVideoUrl } from './services/api';
+import { streamGenerate, streamTestRender, projectVideoUrl, listProjects, getProject } from './services/api';
 import { ChatPanel } from './components/ChatPanel';
 import { VideoPlayer } from './components/VideoPlayer';
 import { ProjectPanel } from './components/ProjectPanel';
@@ -50,6 +50,39 @@ export default function App() {
     const s = settingsStore.getSettings();
     setModel(s.directorModel);
     setRenderer(s.renderer);
+    
+    // ── 新增：自动恢复最近一次对话历史 ──
+    const restoreHistory = async () => {
+      try {
+        const projects = await listProjects();
+        if (projects.length > 0) {
+          const latest = projects[0]; // 第一个是最近的
+          const detail = await getProject(latest.id);
+          if (detail && detail.chat_history) {
+            const historyMsgs: Message[] = [WELCOME];
+            // 将后端的 chat.json 记录转换为前端 Message 格式
+            // 简单处理：将最初的 prompt 还原为 user 消息，后续合并为 ai/log 消息
+            historyMsgs.push({ id: 'h_u', type: 'user', text: detail.prompt });
+            historyMsgs.push({ 
+              id: 'h_l', 
+              type: 'ai', // 使用 ai 类型来简化显示历史日志
+              text: '（已加载历史记录）',
+              entries: detail.chat_history.map((h: any) => ({
+                step: h.step,
+                msg: h.msg,
+                ts: h.ts || Date.now()
+              }))
+            });
+            setMessages(historyMsgs);
+            if (detail.has_video) setVideoUrl(projectVideoUrl(detail.id));
+          }
+        }
+      } catch (e) {
+        console.warn("Restore history failed:", e);
+      }
+    };
+    restoreHistory();
+
     return settingsStore.subscribe(() => {
        const ns = settingsStore.getSettings();
        setModel(ns.directorModel);

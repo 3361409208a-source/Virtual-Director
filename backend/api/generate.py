@@ -27,6 +27,44 @@ import json as _json
 
 router = APIRouter()
 
+from pydantic import BaseModel
+from backend.services.llm import llm_call
+
+class OptimizeRequest(BaseModel):
+    prompt: str
+    context: str = "director" # "director" or "modeling"
+
+@router.post("/optimize-prompt")
+async def optimize_prompt(req: OptimizeRequest):
+    if req.context == "modeling":
+        system = (
+            "你是一个 3D 建模 Prompt 专家。你的任务是将用户简单的建模需求扩充为‘总监级’的详细指令。\n"
+            "要求：\n"
+            "1. 增加形态学细节：描述骨架、肌肉、关节、外挂零件。\n"
+            "2. 增加材质语义：明确哪些地方是高光金属、哪些是磨砂、哪些是自发光。\n"
+            "3. 强调空间感：描述零件之间的嵌套和连接关系。\n"
+            "直接输出优化后的 Prompt，不要有任何前缀。不要输出 JSON。"
+        )
+    else:
+        system = (
+            "你是一个电影导演级 Prompt 专家。你的任务是将用户简单的短句扩充为极具画面感的 3D 视频生成指令。\n"
+            "要求：\n"
+            "1. 增加镜头语言：描述视角（特写、全景、跟拍）。\n"
+            "2. 增加动态细节：描述物体的具体动作、物理反馈。\n"
+            "3. 增加环境氛围：描述光影、天气、特效。\n"
+            "直接输出优化后的 Prompt，不要有任何前缀。"
+        )
+    
+    try:
+        # Since it's an async endpoint calling a synchronous llm_call, we run in thread
+        import asyncio
+        optimized = await asyncio.to_thread(llm_call, system, req.prompt)
+        if isinstance(optimized, dict):
+            optimized = optimized.get("text", str(optimized))
+        return {"optimized": str(optimized).strip()}
+    except Exception as e:
+        return {"error": str(e), "optimized": req.prompt}
+
 
 def _emit(step: str, msg: str, **extra) -> str:
     payload = {"step": step, "msg": msg, **extra}
