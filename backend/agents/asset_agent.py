@@ -6,7 +6,7 @@ from backend.config import GODOT_DIR
 from backend.services.asset_generator import generate_single_asset
 import asyncio
 
-def run_asset_agent(prompt: str, director: dict, progress_cb=None, token_cb=None) -> dict:
+def run_asset_agent(prompt: str, director: dict, progress_cb=None, token_cb=None, model_override=None) -> dict:
     """
     Worker E: Two-phase asset pipeline.
     Phase 1 — LLM generates search queries per actor, then fetch GLB from open-source sites.

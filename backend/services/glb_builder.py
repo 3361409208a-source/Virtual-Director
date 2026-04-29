@@ -588,7 +588,11 @@ def _tree_mesh(config: dict):
         branch_len = trunk_h * 0.5 * _rng.uniform(0.7, 1.0)
         _branch(start, direction, branch_len, trunk_r * 0.6, levels, f"branch_{b}")
 
-    # Add canopy foliage at top (sphere of leaves)
+    # Add canopy foliage or fruits at top
+    fruit_count = int(config.get("fruit_count", 0))
+    fruit_size  = float(config.get("fruit_size", 0.08))
+    fruit_color = config.get("fruit_color", {"r": 1.0, "g": 0.2, "b": 0.2})
+
     if leaf_type == "sphere" and levels >= 2:
         canopy_y = trunk_h * 0.85
         canopy_r = trunk_h * 0.4
@@ -597,6 +601,24 @@ def _tree_mesh(config: dict):
         for i in range(len(cv)):
             cv[i] = [cv[i][0], cv[i][1] + canopy_y, cv[i][2]]
         parts.append((cv, ci, leaf_color, "canopy"))
+
+    # If fruits are requested, we distribute them randomly in the canopy area
+    if fruit_count > 0:
+        canopy_y = trunk_h * 0.85
+        canopy_r = trunk_h * 0.45
+        for f_idx in range(fruit_count):
+            # Random position within canopy ellipsoid
+            phi = _rng.uniform(0, math.pi * 2)
+            theta = _rng.uniform(0, math.pi)
+            dist = _rng.uniform(0.3, 1.0)
+            fx = canopy_r * dist * math.sin(theta) * math.cos(phi)
+            fy = canopy_y + (canopy_r * 0.7) * dist * math.cos(theta)
+            fz = canopy_r * dist * math.sin(theta) * math.sin(phi)
+            
+            fv, fi = _sphere_mesh(fruit_size, fruit_size, fruit_size, rings=4, segs=6)
+            for i in range(len(fv)):
+                fv[i] = [fv[i][0] + fx, fv[i][1] + fy, fv[i][2] + fz]
+            parts.append((fv, fi, fruit_color, f"fruit_{f_idx}"))
 
     return parts
 
@@ -989,12 +1011,16 @@ def build_glb(parts: list[dict]) -> bytes:
             verts, indices = _extrude_mesh(cross_section, depth)
         elif shape == "spline_tube":
             spline_points = part.get("points", [])
-            spline_radius = float(part.get("radius", 0.05))
-            spline_segs = int(part.get("segments", 8))
-            spline_interp = int(part.get("interp_steps", 24))
-            verts, indices = _spline_tube_mesh(spline_points, spline_radius, spline_segs, spline_interp)
-            pos = {"x": 0, "y": 0, "z": 0}
-            rot = {"x": 0, "y": 0, "z": 0}
+            if len(spline_points) < 2:
+                print(f"[GLBBuilder] spline_tube {name} has < 2 points, falling back to sphere")
+                verts, indices = _sphere_mesh(sx/2, sy/2, sz/2)
+            else:
+                spline_radius = float(part.get("radius", 0.05))
+                spline_segs = int(part.get("segments", 8))
+                spline_interp = int(part.get("interp_steps", 24))
+                verts, indices = _spline_tube_mesh(spline_points, spline_radius, spline_segs, spline_interp)
+                pos = {"x": 0, "y": 0, "z": 0}
+                rot = {"x": 0, "y": 0, "z": 0}
         elif shape == "deformed":
             disp = float(part.get("displacement", 0.15))
             detail = int(part.get("detail", 2))

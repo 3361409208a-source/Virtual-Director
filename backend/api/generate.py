@@ -17,7 +17,7 @@ from backend.agents.physics_agent import run_physics_agent
 from backend.agents.asset_agent import run_asset_agent
 from backend.services.renderer import do_godot, do_ffmpeg
 from backend.services.renderer_blender import do_blender
-from backend.services.llm import set_model
+from backend.services.llm import set_model, get_token_usage
 from backend.services.project_store import (
     create_project, append_chat_entry, save_sequence, save_video, finalize_project
 )
@@ -93,7 +93,9 @@ async def generate_video(req: PromptRequest):
                 director["meta"] = meta  # write back so workers get the dict
             m = f"✅ [总导演] 片长 {meta['total_duration']}s · 卡司 {director['actor_ids']} · 五组工作组待命"
             _save("director_done", m)
-            yield _emit("director_done", m)
+            # Get token usage from director
+            token_usage = get_token_usage()
+            yield _emit("director_done", m, tokens=token_usage)
 
             # ── Phase 2: Workers (parallel) ───────────────────────────────────
             m = "⚡ [工作组] 场景美术 · 角色指导 · 摄影指导 · 物理特效 · 美术资产 — 五组同时开拍..."
@@ -127,11 +129,23 @@ async def generate_video(req: PromptRequest):
                     loop,
                 )
 
-            asyncio.create_task(_run("scene",   run_scene_agent,   req.prompt, director, ctx, _make_token_cb("scene")))
-            asyncio.create_task(_run("actor",   run_actor_agent,   req.prompt, director, ctx, _make_token_cb("actor")))
-            asyncio.create_task(_run("camera",  run_camera_agent,  req.prompt, director,      _make_token_cb("camera")))
-            asyncio.create_task(_run("physics", run_physics_agent, req.prompt, director,      _make_token_cb("physics")))
-            asyncio.create_task(_run("asset",   run_asset_agent,   req.prompt, director, _asset_progress_cb, _make_token_cb("asset")))
+            # Determine worker model for all agents
+            worker_model = req.worker_model
+            if worker_model == "auto":
+                # Prefer Flash models for high-volume worker tasks
+                from backend.services.llm import AVAILABLE_MODELS
+                if "GLM-4.7-Flash" in AVAILABLE_MODELS:
+                    worker_model = "GLM-4.7-Flash"
+                elif "deepseek-v4-flash" in AVAILABLE_MODELS:
+                    worker_model = "deepseek-v4-flash"
+                else:
+                    worker_model = req.model
+
+            asyncio.create_task(_run("scene",   run_scene_agent,   req.prompt, director, ctx, _make_token_cb("scene"), worker_model))
+            asyncio.create_task(_run("actor",   run_actor_agent,   req.prompt, director, ctx, _make_token_cb("actor"), worker_model))
+            asyncio.create_task(_run("camera",  run_camera_agent,  req.prompt, director,      _make_token_cb("camera"), worker_model))
+            asyncio.create_task(_run("physics", run_physics_agent, req.prompt, director,      _make_token_cb("physics"), worker_model))
+            asyncio.create_task(_run("asset",   run_asset_agent,   req.prompt, director, _asset_progress_cb, _make_token_cb("asset"), worker_model))
 
             labels = {
                 "scene":   "🏗️ [场景美术]",

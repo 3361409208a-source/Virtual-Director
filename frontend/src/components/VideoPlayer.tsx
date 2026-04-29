@@ -59,7 +59,9 @@ export function VideoPlayer({ videoUrl, isRendering, streamLog = [] }: Props) {
         {videoUrl ? (
           <video src={videoUrl} controls autoPlay loop />
         ) : isRendering ? (
-          <StreamLog events={streamLog} />
+          <div className="stream-log-wrapper">
+            <StreamLog events={streamLog} />
+          </div>
         ) : (
           <div className="placeholder-content">
             <div className="placeholder-icon">🎬</div>

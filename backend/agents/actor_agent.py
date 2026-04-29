@@ -1,8 +1,8 @@
-from backend.services.llm import llm_call
+from backend.services.llm import llm_call, AVAILABLE_MODELS
 from backend.tools.definitions import actor_tool
 
 
-def run_actor_agent(prompt: str, director: dict, scene_ctx: dict, token_cb=None) -> dict:
+def run_actor_agent(prompt: str, director: dict, scene_ctx: dict, token_cb=None, model_override=None) -> dict:
     """
     Worker B: Define actors and generate per-actor keyframe animation tracks.
     Must use the exact actor IDs provided by the director.
@@ -61,6 +61,7 @@ def run_actor_agent(prompt: str, director: dict, scene_ctx: dict, token_cb=None)
         "车轮滚动：sub_tracks.wheel_fl rotation.x 随 Z 位移线性递增（每米转动 ~57°）；\n"
         "仅在有 composite 类型资产时使用 sub_tracks，下载模型无效果。"
     )
-    return llm_call(system, prompt, actor_tool, token_cb=token_cb)
+    # Use provided model_override or default to current model
+    return llm_call(system, prompt, actor_tool, token_cb=token_cb, model_override=model_override)
 
 

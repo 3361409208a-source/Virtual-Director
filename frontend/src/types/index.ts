@@ -55,4 +55,8 @@ export interface SSEEvent {
   video_url?: string;
   sequence?: SceneSequence;
   review_sid?: string;
+  tokens?: {
+    input: number;
+    output: number;
+  };
 }

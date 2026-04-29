@@ -12,13 +12,16 @@ from backend.config import (
 # Providers and models
 AVAILABLE_MODELS = [
     "deepseek-chat", "deepseek-reasoner",
-    "deepseek-v4-flash", "deepseek-v4-pro", 
+    "deepseek-v4-flash", "deepseek-v4-pro",
     "GLM-4.7-Flash",
     "astron-code-latest"
 ]
 
 # Per-request model override (safe for concurrent requests via asyncio context)
 _model_var: ContextVar[str] = ContextVar("deepseek_model", default="deepseek-v4-flash")
+
+# Token usage storage for current request
+_token_usage_var: ContextVar[dict] = ContextVar("token_usage", default={"input": 0, "output": 0})
 
 
 
@@ -65,6 +68,16 @@ def set_model(model: str) -> None:
 
 def get_model() -> str:
     return _model_var.get()
+
+
+def get_token_usage() -> dict:
+    """Get the token usage for the current request."""
+    return _token_usage_var.get().copy()
+
+
+def set_token_usage(input_tokens: int, output_tokens: int) -> None:
+    """Set the token usage for the current request."""
+    _token_usage_var.set({"input": input_tokens, "output": output_tokens})
 
 
 def _repair_json(s: str) -> str:
@@ -213,6 +226,8 @@ def _llm_call_anthropic(
     for attempt in range(retries + 1):
         try:
             args_str = ""
+            input_tokens = 0
+            output_tokens = 0
             with client.messages.stream(
                 model=model,
                 max_tokens=4096,
@@ -240,6 +255,17 @@ def _llm_call_anthropic(
                             if thinking_cb:
                                 try: thinking_cb(frag)
                                 except Exception: pass
+                    elif event.type == "message_start":
+                        input_tokens = event.message.usage.input_tokens
+                        output_tokens = event.message.usage.output_tokens
+                    elif event.type == "message_delta":
+                        output_tokens = event.usage.output_tokens
+
+            # Store token info in a global-like variable for retrieval
+            if not hasattr(_llm_call_anthropic, '_last_tokens'):
+                _llm_call_anthropic._last_tokens = {}
+            _llm_call_anthropic._last_tokens['input'] = input_tokens
+            _llm_call_anthropic._last_tokens['output'] = output_tokens
 
             if not args_str:
                 raise RuntimeError("Anthropic LLM did not return content.")
@@ -274,13 +300,14 @@ def _llm_call_anthropic(
     raise last_error or RuntimeError("Anthropic LLM call failed after retries")
 
 
-def llm_call(system: str, user: str, tool: dict, token_cb=None, thinking_cb=None) -> dict:
+def llm_call(system: str, user: str, tool: dict, token_cb=None, thinking_cb=None, model_override: str = None) -> dict:
     """Single LLM call that enforces a specific function tool and returns parsed args.
     
     token_cb: optional callable(str) called with each streamed token delta (normal content).
     thinking_cb: optional callable(str) called with thinking/reasoning content.
+    model_override: Force a specific model for this call (e.g. for fast workers).
     """
-    selection = _model_var.get()
+    selection = model_override or _model_var.get()
     
     client, model = _get_client_config(selection)
     if not client:
@@ -315,7 +342,7 @@ def llm_call(system: str, user: str, tool: dict, token_cb=None, thinking_cb=None
     for attempt in range(retries + 1):
         try:
             if supports_tools:
-                stream = client.chat.completions.create(
+                resp = client.chat.completions.create(
                     model=model,
                     messages=messages,
                     tools=[tool],
@@ -325,7 +352,7 @@ def llm_call(system: str, user: str, tool: dict, token_cb=None, thinking_cb=None
                 args_str = ""
                 _tool_call_id = None
                 _tool_call_name = None
-                for chunk in stream:
+                for chunk in resp:
                     delta = chunk.choices[0].delta if chunk.choices else None
                     if not delta:
                         continue
@@ -350,6 +377,11 @@ def llm_call(system: str, user: str, tool: dict, token_cb=None, thinking_cb=None
                                 token_cb(delta.content)
                             except Exception:
                                 pass
+
+                # Token usage is not directly available on the stream object in this version of the SDK 
+                # unless stream_options={"include_usage": True} is used.
+                # Removing for now to fix the 'Stream' object has no attribute 'usage' crash.
+
                 if not args_str:
                     raise RuntimeError("LLM did not return a tool call or content.")
             else:

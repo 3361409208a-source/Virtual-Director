@@ -3,6 +3,19 @@ import type { SceneSequence } from '../types';
 import { confirmReview, rejectReview, streamAiGenerateModel, type AIModelEvent } from '../services/api';
 import { ThreeModelPreview } from './ThreeModelPreview';
 
+// ── Icons ──────────────────────────────────────────────────────────────────
+const IconSparkles = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>;
+const IconBox = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>;
+const IconTrash = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>;
+const IconChevronDown = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>;
+const IconChevronUp = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m18 15-6-6-6 6"/></svg>;
+const IconPlus = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>;
+const IconTerminal = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg>;
+const IconActor = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>;
+const IconTrack = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 18l5-5-5-5"/><path d="M6 18l5-5-5-5"/></svg>;
+const IconCamera = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><path d="M8 21h8"/><path d="M12 17v4"/><path d="m3 7 9 9 9-9"/></svg>;
+const IconEnvironment = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 18a5 5 0 0 0-10 0"/><line x1="12" x2="12" y1="2" y2="9"/><line x1="4.22" x2="5.64" y1="10.22" y2="11.64"/><line x1="1" x2="3" y1="18" y2="18"/><line x1="21" x2="23" y1="18" y2="18"/><line x1="18.36" x2="19.78" y1="11.64" y2="10.22"/><line x1="23" x2="23" y1="22" y2="22"/><line x1="1" x2="1" y1="22" y2="22"/></svg>;
+
 interface Props {
   sid: string;
   sequence: SceneSequence;
@@ -29,15 +42,12 @@ function tryParse(s: string): { ok: true; value: unknown } | { ok: false; error:
 
 function getAssetUrl(path: string): string | null {
   if (!path) return null;
-  // Expected path format: "assets/category/filename.glb"
-  // API format: "/api/models/category/filename"
   const parts = path.split('/');
   if (parts.length >= 3) {
     const cat = parts[parts.length - 2];
     const file = parts[parts.length - 1];
     return `/api/models/${cat}/${file}`;
   }
-  // Fallback: if it's already a full URL
   if (path.startsWith('http') || path.startsWith('/')) return path;
   return null;
 }
@@ -48,7 +58,7 @@ function getAssetUrl(path: string): string | null {
 
 interface BlockProps {
   label: string;
-  icon: string;
+  icon: React.ReactNode;
   data: unknown;
   onChange: (newVal: unknown) => void;
 }
@@ -100,7 +110,7 @@ function EditableBlock({ label, icon, data, onChange }: BlockProps) {
               编辑
             </button>
           )}
-          <span className="review-block-toggle">{collapsed && !editing ? '▶' : '▼'}</span>
+          <span className="review-block-toggle">{collapsed && !editing ? <IconChevronDown /> : <IconChevronUp />}</span>
         </div>
       </div>
 
@@ -143,18 +153,25 @@ interface RegeneratorProps {
 
 function AssetRegenerator({ actorId, currentAsset, model, onDone }: RegeneratorProps) {
   const safeId = actorId || 'object';
-  // 使用当前资产名称或 ID 作为初始描述，并去除下划线
   const initialPrompt = currentAsset?.name || safeId.replace(/_/g, ' ');
   const [prompt, setPrompt] = useState(initialPrompt);
   const [generating, setGenerating] = useState(false);
   const [log, setLog] = useState<string[]>([]);
+  const [currentTokens, setCurrentTokens] = useState<{ input: number; output: number } | undefined>(undefined);
   const logEndRef = useRef<HTMLDivElement>(null);
+
+  const formatTokens = (tokens?: { input: number; output: number }) => {
+    if (!tokens) return '0';
+    const total = tokens.input + tokens.output;
+    return total.toLocaleString();
+  };
 
   const handleGenerate = async () => {
     if (generating) return;
     setGenerating(true);
-    setLog(['🚀 开始重新建模...']);
+    setLog(['开始重新建模...']);
     let tokenBuf = '';
+    setCurrentTokens(undefined);
     try {
       await streamAiGenerateModel(prompt, (ev: AIModelEvent) => {
         if (ev.step === 'thinking') {
@@ -184,6 +201,10 @@ function AssetRegenerator({ actorId, currentAsset, model, onDone }: RegeneratorP
           if (ev.url) onDone(ev.url);
         } else if (ev.step === 'error') {
           setLog(prev => [...prev, '❌ ' + ev.msg]);
+        } else if (ev.step === 'building' || ev.step === 'start') {
+          setCurrentTokens(ev.tokens);
+          tokenBuf = '';
+          setLog(prev => [...prev, ev.msg]);
         } else {
           tokenBuf = '';
           setLog(prev => [...prev, ev.msg]);
@@ -206,24 +227,33 @@ function AssetRegenerator({ actorId, currentAsset, model, onDone }: RegeneratorP
     <div className="asset-regen-item">
       <div className="asset-regen-header">
         <div className="asset-regen-info">
-          <span className="asset-regen-id">🎭 {safeId}</span>
+          <span className="asset-regen-id"><IconActor /> {safeId}</span>
           <span className="asset-regen-status">
-            {isComposite ? '🧱 积木拼装' : `🧊 外部模型: ${currentAsset?.path?.split('/').pop()}`}
+             {isComposite ? <><IconBox /> 积木拼装</> : <><IconBox /> 外部模型：{currentAsset?.path?.split('/').pop()}</>}
           </span>
         </div>
-        {!isComposite && currentAsset?.path && (
-          <div className="asset-preview-container">
-            {getAssetUrl(currentAsset.path) && (
-              <ThreeModelPreview
-                url={getAssetUrl(currentAsset.path) + (currentAsset.path.includes('?') ? '&' : '?') + 't=' + Date.now()}
-              />
-            )}
+        {currentTokens && (
+          <div className="asset-token-usage">
+            <IconTerminal /> {formatTokens(currentTokens)} tokens
+            <span className="token-breakdown">
+              (📥 {currentTokens.input.toLocaleString()} + 📤 {currentTokens.output.toLocaleString()})
+            </span>
           </div>
         )}
       </div>
-      
+
+      {!isComposite && currentAsset?.path && (
+        <div className="asset-preview-container-large">
+          {getAssetUrl(currentAsset.path) && (
+            <ThreeModelPreview
+              url={getAssetUrl(currentAsset.path) + (currentAsset.path.includes('?') ? '&' : '?') + 't=' + Date.now()}
+            />
+          )}
+        </div>
+      )}
+
       <div className="asset-regen-controls">
-        <input 
+        <input
           className="asset-regen-input"
           value={prompt}
           onChange={e => setPrompt(e.target.value)}
@@ -231,12 +261,12 @@ function AssetRegenerator({ actorId, currentAsset, model, onDone }: RegeneratorP
           placeholder="描述你想要的样子..."
           disabled={generating}
         />
-        <button 
+        <button
           className="asset-regen-btn"
           onClick={handleGenerate}
           disabled={generating}
         >
-          {generating ? '⏳ 生成中...' : '✨ AI 重新建模'}
+          {generating ? '⏳ 生成中...' : <><IconSparkles /> AI 重新建模</>}
         </button>
       </div>
 
@@ -319,13 +349,13 @@ export function SceneReviewPanel({ sid, sequence: initialSequence, model, onConf
             className={`review-tab ${activeTab === 'assets' ? 'active' : ''}`}
             onClick={() => setActiveTab('assets')}
           >
-            资产建模
+            <IconBox /> 资产建模
           </button>
           <button
             className={`review-tab ${activeTab === 'data' ? 'active' : ''}`}
             onClick={() => setActiveTab('data')}
           >
-            数据编辑
+            <IconTerminal /> 数据编辑
           </button>
         </div>
 
@@ -335,10 +365,9 @@ export function SceneReviewPanel({ sid, sequence: initialSequence, model, onConf
           {activeTab === 'assets' && (
             <div className="scene-review-assets">
               <div className="review-section-hint">
-                💡 如果 AI 下载或拼装的模型不满意，可以在此处输入描述重新生成专属 GLB 模型。
+                <IconSparkles /> 如果 AI 下载或拼装的模型不满意，可以在此处输入描述重新生成专属 GLB 模型。
               </div>
               {(seq.actors ?? []).map((actor, idx) => {
-                // actors 可能用 actor_id 或 id 字段
                 const aid: string = actor.actor_id ?? actor.id ?? `actor_${idx}`;
                 return (
                 <AssetRegenerator
@@ -347,7 +376,6 @@ export function SceneReviewPanel({ sid, sequence: initialSequence, model, onConf
                   currentAsset={seq.asset_manifest?.[aid]}
                   model={model}
                   onDone={(newUrl) => {
-                    // Update asset_manifest with the new model
                     const newFilename = newUrl.split('/').pop() || '';
                     const newPath = `assets/custom/${newFilename}`;
                     setSeq(prev => ({
@@ -373,31 +401,31 @@ export function SceneReviewPanel({ sid, sequence: initialSequence, model, onConf
             <div className="scene-review-data">
               <EditableBlock
                 label="场景环境"
-                icon="🏗️"
+                icon={<IconEnvironment />}
                 data={seq.scene_setup}
                 onChange={v => update('scene_setup', v as SceneSequence['scene_setup'])}
               />
               <EditableBlock
                 label="演员列表"
-                icon="🎭"
+                icon={<IconActor />}
                 data={seq.actors}
                 onChange={v => update('actors', v as SceneSequence['actors'])}
               />
               <EditableBlock
                 label="演员运动轨迹"
-                icon="🚶"
+                icon={<IconTrack />}
                 data={seq.actor_tracks}
                 onChange={v => update('actor_tracks', v as SceneSequence['actor_tracks'])}
               />
               <EditableBlock
                 label="摄影机轨迹"
-                icon="🎬"
+                icon={<IconCamera />}
                 data={seq.camera_track}
                 onChange={v => update('camera_track', v as SceneSequence['camera_track'])}
               />
               <EditableBlock
                 label="资产配置 (asset_manifest)"
-                icon="📦"
+                icon={<IconBox />}
                 data={seq.asset_manifest}
                 onChange={v => update('asset_manifest', v as SceneSequence['asset_manifest'])}
               />

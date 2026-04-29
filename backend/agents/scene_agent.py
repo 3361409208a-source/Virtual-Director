@@ -3,7 +3,7 @@ from backend.services.llm import llm_call
 from backend.tools.definitions import scene_tool
 
 
-def run_scene_agent(prompt: str, director: dict, scene_ctx: dict, token_cb=None) -> dict:
+def run_scene_agent(prompt: str, director: dict, scene_ctx: dict, token_cb=None, model_override=None) -> dict:
     """
     Worker A: Build the visual environment (sky, sun, fog, ground, props).
     Receives the director's scene_brief and the scene capability context.

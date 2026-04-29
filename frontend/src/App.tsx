@@ -7,6 +7,9 @@ import { VideoPlayer } from './components/VideoPlayer';
 import { ProjectPanel } from './components/ProjectPanel';
 import { ModelLibraryPanel } from './components/ModelLibraryPanel';
 import { SceneReviewPanel } from './components/SceneReviewPanel';
+import { SettingsPanel } from './components/SettingsPanel';
+import { settingsStore } from './services/settingsStore';
+import { useEffect } from 'react';
 
 const WELCOME: Message = {
   id: '0',
@@ -16,7 +19,14 @@ const WELCOME: Message = {
 
 export type ModelSelection = 'deepseek-chat' | 'deepseek-reasoner' | 'deepseek-v4-flash' | 'deepseek-v4-pro' | 'GLM-4.7-Flash' | 'astron-code-latest';
 export type RendererSelection = 'godot' | 'blender';
-export type ViewMode = 'director' | 'modeling' | 'library';
+export type ViewMode = 'director' | 'modeling' | 'library' | 'settings';
+
+// ── Icons ──────────────────────────────────────────────────────────────────
+const IconDirector = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M7 21h10"/><path d="M12 21V3"/></svg>;
+const IconModeling = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>;
+const IconBox = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>;
+const IconLogo = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>;
+const IconSettings = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h1.56a2 2 0 0 1 1.91 1.44l.36 1.2a1 1 0 0 0 1.18.72l1.24-.27a2 2 0 0 1 2.22.99l.78 1.35a2 2 0 0 1-.44 2.39l-.91.83a1 1 0 0 0 0 1.36l.91.83a2 2 0 0 1 .44 2.39l-.78 1.35a2 2 0 0 1-2.22.99l-1.24-.27a1 1 0 0 0-1.18.72l-.36 1.2a2 2 0 0 1-1.91 1.44h-1.56a2 2 0 0 1-1.91-1.44l-.36-1.2a1 1 0 0 0-1.18-.72l-1.24.27a2 2 0 0 1-2.22-.99l-.78-1.35a2 2 0 0 1 .44-2.39l.91-.83a1 1 0 0 0 0-1.36l-.91-.83a2 2 0 0 1-.44-2.39l.78-1.35a2 2 0 0 1 2.22-.99l1.24.27a1 1 0 0 0 1.18-.72l.36-1.2A2 2 0 0 1 12.22 2z"/><circle cx="12" cy="12" r="3"/></svg>;
 
 export default function App() {
   const [messages, setMessages]       = useState<Message[]>([WELCOME]);
@@ -28,9 +38,26 @@ export default function App() {
   const [isTesting, setIsTesting]     = useState(false);
   const [testMsg, setTestMsg]         = useState('');
   const [streamLog, setStreamLog]      = useState<Record<string, unknown>[]>([]);
+  const [currentTokens, setCurrentTokens] = useState<{ input: number; output: number } | undefined>(undefined);
 
   const [viewingProject, setViewingProject] = useState<{ id: string; videoUrl: string | null } | null>(null);
   const [view, setView] = useState<ViewMode>('director');
+
+  // Keep model and renderer state when switching views
+  const [savedModel, setSavedModel] = useState<ModelSelection>(settingsStore.getSettings().directorModel);
+  const [savedRenderer, setSavedRenderer] = useState<RendererSelection>(settingsStore.getSettings().renderer);
+  
+  // Sync state with settings store
+  useEffect(() => {
+    const s = settingsStore.getSettings();
+    setModel(s.directorModel);
+    setRenderer(s.renderer);
+    return settingsStore.subscribe(() => {
+       const ns = settingsStore.getSettings();
+       setModel(ns.directorModel);
+       setRenderer(ns.renderer);
+    });
+  }, []);
 
   // ── 半自动审核状态 ──────────────────────────────────────────────────────────
   const [reviewState, setReviewState] = useState<{
@@ -95,6 +122,11 @@ export default function App() {
           setStreamLog(prev => [...prev, raw]);
         }
 
+        // Update token usage when we get token info
+        if (event.tokens) {
+          setCurrentTokens(event.tokens);
+        }
+
         // ── 半自动：收到 scene_preview 后进入审核等待模式 ──────────────────
         if (event.step === 'scene_preview' && event.sequence && event.review_sid) {
           setReviewState({ sid: event.review_sid, sequence: event.sequence });
@@ -111,11 +143,11 @@ export default function App() {
           setReviewState(null);
           setView('director');
         }
-      }, model, renderer);
+      }, model, renderer, settingsStore.getSettings().workerModel);
     } catch (err: unknown) {
       appendEntry(logId, {
         step: 'error',
-        msg: `❌ 出错了：${err instanceof Error ? err.message : String(err)}`,
+        msg: `出错了：${err instanceof Error ? err.message : String(err)}`,
         ts: Date.now(),
       });
       setIsRendering(false);
@@ -123,22 +155,42 @@ export default function App() {
     }
   };
 
+  const handleViewChange = (newView: ViewMode) => {
+    // Save current model and renderer before switching
+    if (view !== newView) {
+      if (view === 'director') {
+        setSavedModel(model);
+        setSavedRenderer(renderer);
+      } else if (view === 'modeling' || view === 'library') {
+        // Restore saved model and renderer
+        setModel(savedModel);
+        setRenderer(savedRenderer);
+      }
+    }
+    setView(newView);
+  };
+
   return (
     <div className="app-layout">
       {/* 侧边导航栏 */}
       <nav className="side-nav">
-        <div className="nav-logo">🎬</div>
-        <button className={`nav-item ${view === 'director' ? 'active' : ''}`} onClick={() => setView('director')} title="导演中心">
-          <span className="nav-icon">📽️</span>
+        <div className="nav-logo"><IconLogo /></div>
+        <button className={`nav-item ${view === 'director' ? 'active' : ''}`} onClick={() => handleViewChange('director')} title="导演中心">
+          <span className="nav-icon"><IconDirector /></span>
           <span className="nav-label">导演</span>
         </button>
-        <button className={`nav-item ${view === 'modeling' ? 'active' : ''}`} onClick={() => setView('modeling')} title="AI 建模">
-          <span className="nav-icon">🎨</span>
+        <button className={`nav-item ${view === 'modeling' ? 'active' : ''}`} onClick={() => handleViewChange('modeling')} title="AI 建模">
+          <span className="nav-icon"><IconModeling /></span>
           <span className="nav-label">建模</span>
         </button>
-        <button className={`nav-item ${view === 'library' ? 'active' : ''}`} onClick={() => setView('library')} title="资产库">
-          <span className="nav-icon">📦</span>
+        <button className={`nav-item ${view === 'library' ? 'active' : ''}`} onClick={() => handleViewChange('library')} title="资产库">
+          <span className="nav-icon"><IconBox /></span>
           <span className="nav-label">资产</span>
+        </button>
+        <div style={{ flex: 1 }} />
+        <button className={`nav-item ${view === 'settings' ? 'active' : ''}`} onClick={() => handleViewChange('settings')} title="设置">
+          <span className="nav-icon"><IconSettings /></span>
+          <span className="nav-label">设置</span>
         </button>
       </nav>
 
@@ -172,10 +224,11 @@ export default function App() {
                     }
                   });
                 } catch (e) {
-                  setTestMsg(`❌ 请求失败: ${e instanceof Error ? e.message : String(e)}`);
+                  setTestMsg(`❌ 请求失败：${e instanceof Error ? e.message : String(e)}`);
                   setIsTesting(false);
                 }
               }}
+              currentTokens={currentTokens}
             />
             <div className="center-content">
               <VideoPlayer videoUrl={viewingProject?.videoUrl ?? videoUrl} isRendering={isRendering && !reviewState} streamLog={streamLog} />
@@ -203,7 +256,6 @@ export default function App() {
                 model={model}
                 onConfirmed={() => {
                   setReviewState(null);
-                  // 后端会自动继续，这里我们回到导演页面看进度
                   setView('director');
                 }}
                 onRejected={() => {
@@ -213,21 +265,20 @@ export default function App() {
                 }}
               />
             ) : (
-              <div className="modeling-placeholder">
-                <div className="placeholder-content">
-                  <span className="placeholder-icon">🎨</span>
-                  <h2>AI 建模工作室</h2>
-                  <p>当前没有正在进行的建模任务。请在导演中心发起新的创作请求。</p>
-                  <button className="go-home-btn" onClick={() => setView('director')}>回到导演中心</button>
-                </div>
-              </div>
+              <ModelLibraryPanel isStandalone={true} initialTab="ai" />
             )}
           </div>
         )}
 
         {view === 'library' && (
           <div className="library-view">
-             <ModelLibraryPanel isStandalone={true} />
+            <ModelLibraryPanel isStandalone={true} initialTab="library" />
+          </div>
+        )}
+        
+        {view === 'settings' && (
+          <div className="settings-view">
+            <SettingsPanel />
           </div>
         )}
       </main>

@@ -2,7 +2,7 @@ from backend.services.llm import llm_call
 from backend.tools.definitions import physics_tool
 
 
-def run_physics_agent(prompt: str, director: dict, token_cb=None) -> dict:
+def run_physics_agent(prompt: str, director: dict, token_cb=None, model_override=None) -> dict:
     """
     Worker D: Decide which actors get Godot RigidBody3D physics.
     AI sets initial conditions only; Godot's physics engine handles trajectories.

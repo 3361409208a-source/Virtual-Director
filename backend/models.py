@@ -4,7 +4,8 @@ from typing import Literal
 
 class PromptRequest(BaseModel):
     prompt: str
-    model: Literal["deepseek-chat", "deepseek-reasoner", "deepseek-v4-flash", "deepseek-v4-pro", "GLM-4.7-Flash", "astron-code-latest"] = "astron-code-latest"
+    model: str = "astron-code-latest"
+    worker_model: str = "auto"
     renderer: Literal["godot", "blender"] = "godot"
 
 

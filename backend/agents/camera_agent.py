@@ -2,7 +2,7 @@ from backend.services.llm import llm_call
 from backend.tools.definitions import camera_tool
 
 
-def run_camera_agent(prompt: str, director: dict, token_cb=None) -> dict:
+def run_camera_agent(prompt: str, director: dict, token_cb=None, model_override=None) -> dict:
     """
     Worker C: Plan camera shots using runtime-tracking modes.
     The camera controller in Godot reads actor positions every frame,

@@ -1,7 +1,18 @@
 import { useState, useEffect, useRef } from 'react';
-import type { ModelMeta, AIGenerateResult, AIModelEvent } from '../services/api';
-import { listModels, uploadModel, deleteCustomModel, streamAiGenerateModel } from '../services/api';
+import type { ModelMeta } from '../services/api';
+import { listModels, uploadModel, deleteCustomModel } from '../services/api';
 import { ThreeModelPreview } from './ThreeModelPreview';
+import { modelingStore } from '../services/modelingStore';
+
+// ── Icons ──────────────────────────────────────────────────────────────────
+const IconSparkles = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>;
+const IconBox = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>;
+const IconTrash = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>;
+const IconChevronDown = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>;
+const IconChevronUp = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m18 15-6-6-6 6"/></svg>;
+const IconPlus = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>;
+const IconUpload = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>;
+const IconTerminal = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg>;
 
 const CAT_LABEL: Record<string, string> = {
   builtin:    '内置',
@@ -14,11 +25,11 @@ const CAT_COLOR: Record<string, string> = {
   custom:     '#f0883e',
 };
 
-type Tab = 'library' | 'ai';
+export type Tab = 'library' | 'ai';
 
-export function ModelLibraryPanel({ isStandalone = false }: { isStandalone?: boolean }) {
+export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library' }: { isStandalone?: boolean, initialTab?: Tab }) {
   const [open, setOpen]           = useState(isStandalone);
-  const [tab, setTab]             = useState<Tab>(isStandalone ? 'ai' : 'library');
+  const [tab, setTab]             = useState<Tab>(initialTab);
   const [models, setModels]       = useState<ModelMeta[]>([]);
   const [filter, setFilter]       = useState<'all' | 'builtin' | 'downloaded' | 'custom'>('all');
   const [preview, setPreview]     = useState<ModelMeta | null>(null);
@@ -27,18 +38,34 @@ export function ModelLibraryPanel({ isStandalone = false }: { isStandalone?: boo
   const [error, setError]         = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
   const [libPage, setLibPage]     = useState(0);
+  const [showTemp, setShowTemp]   = useState(false);
   const LIB_PAGE_SIZE = 6;
 
-  // AI modeling state
-  const [aiPrompt, setAiPrompt]         = useState('');
-  const [aiBaseModel, setAiBaseModel]   = useState<ModelMeta | null>(null);
-  const [aiLlm, setAiLlm]              = useState('astron-code-latest');
-  const [aiGenerating, setAiGenerating] = useState(false);
-  const [aiResult, setAiResult]         = useState<AIGenerateResult | null>(null);
-  const [aiError, setAiError]           = useState('');
-  const [aiLog, setAiLog]               = useState<string[]>([]);
-  const [saving, setSaving]             = useState(false);
-  const logEndRef                       = useRef<HTMLDivElement>(null);
+  // AI modeling state from global store
+  const [mState, setMState] = useState(modelingStore.getState());
+  const [aiBaseModel, setAiBaseModel] = useState<ModelMeta | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [logCollapsed, setLogCollapsed] = useState(false);
+  const logEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    return modelingStore.subscribe(setMState);
+  }, []);
+
+  const { isGenerating: aiGenerating, logs: aiLog, result: aiResult, error: aiError, prompt: aiPrompt, llm: aiLlm, tokens: aiTokens } = mState;
+  const setAiPrompt = (p: string) => modelingStore.setPrompt(p);
+  const setAiLlm = (l: string) => modelingStore.setLlm(l);
+
+  // Auto-collapse/expand log based on generation state
+  useEffect(() => {
+    if (aiGenerating) {
+      setLogCollapsed(false);
+    } else if (aiResult) {
+      // Auto collapse after a short delay once success to show the final model better
+      const timer = setTimeout(() => setLogCollapsed(true), 500);
+      return () => clearTimeout(timer);
+    }
+  }, [aiGenerating, aiResult]);
 
   // Base model modal
   const [showBaseModal, setShowBaseModal] = useState(false);
@@ -82,83 +109,48 @@ export function ModelLibraryPanel({ isStandalone = false }: { isStandalone?: boo
 
   const handleAiGenerate = async () => {
     if (!aiPrompt.trim() || aiGenerating) return;
-    setAiGenerating(true);
-    setAiResult(null);
-    setAiError('');
-    setAiLog([]);
-    try {
-      let tokenBuf = '';
-      await streamAiGenerateModel(
-        aiPrompt.trim(),
-        (ev: AIModelEvent) => {
-          if (ev.step === 'thinking') {
-            setAiLog(prev => {
-              const updated = [...prev];
-              const lastIdx = updated.length - 1;
-              if (lastIdx >= 0 && updated[lastIdx].startsWith('💭')) {
-                updated[lastIdx] = updated[lastIdx] + ev.msg;
-              } else {
-                updated.push('💭 ' + ev.msg);
-              }
-              return updated;
-            });
-            setTimeout(() => logEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 30);
-          } else if (ev.step === 'token') {
-            tokenBuf += ev.msg;
-            setAiLog(prev => {
-              const updated = [...prev];
-              if (updated.length > 0 && updated[updated.length - 1].startsWith('📝')) {
-                updated[updated.length - 1] = '📝 ' + tokenBuf;
-              } else {
-                updated.push('📝 ' + tokenBuf);
-              }
-              return updated;
-            });
-            setTimeout(() => logEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 30);
-          } else if (ev.step === 'done') {
-            setAiResult(ev as unknown as AIGenerateResult);
-            setAiLog(prev => [...prev, '✨ 建模完成！']);
-            load();
-          } else if (ev.step === 'error') {
-            setAiError(ev.msg);
-            setAiLog(prev => [...prev, '❌ ' + ev.msg]);
-          } else {
-            tokenBuf = '';
-            setAiLog(prev => [...prev, ev.msg]);
-          }
-        },
-        aiLlm,
-        aiBaseModel?.name ?? '',
-      );
-      tokenBuf = ''; // Reset for next use
-    } catch (e) {
-      setAiError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setAiGenerating(false);
-    }
+    modelingStore.startGenerate(aiPrompt, aiLlm, aiBaseModel?.name);
   };
+
+  // Scroll log to bottom when it updates
+  useEffect(() => {
+    if (aiLog.length > 0 && !logCollapsed) {
+      logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [aiLog, logCollapsed]);
 
   const handleAiDelete = async () => {
     if (!aiResult) return;
     if (!confirm(`删除生成的模型 ${aiResult.filename}？`)) return;
     await deleteCustomModel(aiResult.filename);
-    setAiResult(null);
-    setAiPrompt('');
+    modelingStore.reset();
     await load();
   };
 
-  const filteredModels = filter === 'all' ? models : models.filter(m => m.category === filter);
+  const filteredModels = models.filter(m => {
+    const isCatMatch = filter === 'all' || m.category === filter;
+    if (!isCatMatch) return false;
+    // Hide ai_ prefixed custom models unless showTemp is true
+    if (!showTemp && m.category === 'custom' && m.filename.startsWith('ai_')) return false;
+    return true;
+  });
   const pagedModels = filteredModels.slice(libPage * LIB_PAGE_SIZE, (libPage + 1) * LIB_PAGE_SIZE);
 
   const renderContent = () => (
     <>
       <div className="model-lib-header">
-        <div className="model-lib-title">{isStandalone ? "AI 深度建模工作室" : "资产库"}</div>
+        <div className="model-lib-title">{isStandalone ? (tab === 'ai' ? "AI 深度建模工作室" : "资产库") : "资产库"}</div>
         <div className="model-lib-header-actions">
-          <div className="model-lib-top-tabs">
-            <button className={`model-top-tab ${tab === 'library' ? 'active' : ''}`} onClick={() => setTab('library')}>🧊 浏览库</button>
-            <button className={`model-top-tab ${tab === 'ai' ? 'active' : ''}`} onClick={() => setTab('ai')}>✨ AI 建模</button>
-          </div>
+          {!isStandalone && (
+            <div className="model-lib-top-tabs">
+              <button className={`model-top-tab ${tab === 'library' ? 'active' : ''}`} onClick={() => setTab('library')}>
+                <IconBox /> 浏览库
+              </button>
+              <button className={`model-top-tab ${tab === 'ai' ? 'active' : ''}`} onClick={() => setTab('ai')}>
+                <IconSparkles /> AI 建模
+              </button>
+            </div>
+          )}
           {!isStandalone && <button className="model-lib-close" onClick={() => setOpen(false)}>✕</button>}
         </div>
       </div>
@@ -176,6 +168,13 @@ export function ModelLibraryPanel({ isStandalone = false }: { isStandalone?: boo
                     </span>
                   </button>
                 ))}
+                <button 
+                  className={`model-tab ${showTemp ? 'active' : ''}`} 
+                  onClick={() => { setShowTemp(!showTemp); setLibPage(0); }}
+                  style={{ marginLeft: 'auto', fontSize: 10, opacity: 0.7 }}
+                >
+                  {showTemp ? '显示全部' : '精简视图'}
+                </button>
               </div>
 
               <div className="model-grid">
@@ -191,7 +190,7 @@ export function ModelLibraryPanel({ isStandalone = false }: { isStandalone?: boo
                       <span className="model-card-name" title={m.filename}>{m.name}</span>
                       <span className="model-cat-badge" style={{ background: CAT_COLOR[m.category] + '22', color: CAT_COLOR[m.category] }}>{CAT_LABEL[m.category]}</span>
                     </div>
-                    {m.category === 'custom' && <button className="model-delete-btn" onClick={e => { e.stopPropagation(); handleDelete(m); }}>🗑</button>}
+                    {m.category === 'custom' && <button className="model-delete-btn" onClick={e => { e.stopPropagation(); handleDelete(m); }}><IconTrash /></button>}
                   </div>
                 ))}
                 {pagedModels.length === 0 && !loading && <div className="model-empty">暂无模型</div>}
@@ -233,7 +232,7 @@ export function ModelLibraryPanel({ isStandalone = false }: { isStandalone?: boo
               <div className="model-lib-footer" style={{ padding: 16, borderTop: '1px solid var(--border-color)' }}>
                 <input type="file" accept=".glb" ref={fileRef} style={{ display: 'none' }} onChange={handleUpload} />
                 <button className="model-upload-btn" style={{ width: '100%' }} onClick={() => fileRef.current?.click()} disabled={uploading}>
-                  {uploading ? '⏳ 上传中...' : '📤 上传本地 GLB 模型'}
+                  {uploading ? '⏳ 上传中...' : <><IconUpload /> 上传本地 GLB 模型</>}
                 </button>
               </div>
             </div>
@@ -246,9 +245,9 @@ export function ModelLibraryPanel({ isStandalone = false }: { isStandalone?: boo
               <div className="ai-section-label">① 选择参考底模（可选）</div>
               <button className="ai-base-trigger" onClick={() => { setTempBaseModel(aiBaseModel); setShowBaseModal(true); }}>
                 {aiBaseModel ? (
-                  <span className="ai-base-trigger-name">📦 {aiBaseModel.name}</span>
+                  <span className="ai-base-trigger-name"><IconBox /> {aiBaseModel.name}</span>
                 ) : (
-                  <span className="ai-base-trigger-placeholder">➕ 点击选择底模...</span>
+                  <span className="ai-base-trigger-placeholder"><IconPlus /> 点击选择底模...</span>
                 )}
               </button>
               {aiBaseModel && (
@@ -281,45 +280,77 @@ export function ModelLibraryPanel({ isStandalone = false }: { isStandalone?: boo
                 rows={4} 
               />
               <button className="ai-generate-btn" onClick={handleAiGenerate} disabled={aiGenerating || !aiPrompt.trim()}>
-                {aiGenerating ? <><span className="ai-spinner" /> AI 建模中…</> : '✨ 启动深度建模引擎'}
+                {aiGenerating ? <><span className="ai-spinner" /> AI 建模中…</> : <><IconSparkles /> 启动深度建模引擎</>}
               </button>
               {aiError && <div className="ai-model-error">❌ {aiError}</div>}
             </div>
 
             <div className="ai-model-right">
-              {aiResult ? (
+              {(aiResult || mState.parts.length > 0) ? (
                 <div className="ai-result">
                   <div className="ai-result-viewer">
-                    <ThreeModelPreview url={`${aiResult.url}?t=${Date.now()}`} />
+                    <ThreeModelPreview 
+                      url={aiResult ? `${aiResult.url}?t=${Date.now()}` : null} 
+                      parts={mState.parts}
+                    />
                   </div>
-                  <div className="ai-result-info">
-                    <div className="ai-result-name">{aiResult.model_name}</div>
-                    <div className="ai-result-desc">{aiResult.description}</div>
-                    <div className="ai-result-meta">
-                      <span>{aiResult.parts_count} 零件</span>
-                      <span>{aiResult.size_kb} KB</span>
+                  {aiResult && (
+                    <div className="ai-result-info">
+                      <div className="ai-result-name">{aiResult.model_name}</div>
+                      <div className="ai-result-desc">{aiResult.description}</div>
+                      <div className="ai-result-meta">
+                        <span>{aiResult.parts_count} 零件</span>
+                        <span>{aiResult.size_kb} KB</span>
+                      </div>
+                      <div className="ai-result-actions">
+                        <button className="ai-save-btn" disabled={saving} onClick={async () => { setSaving(true); try { await load(); } finally { setSaving(false); } }}>
+                          {saving ? '⏳ 保存中...' : <><IconUpload /> 存入资产库</>}
+                        </button>
+                        <button className="ai-delete-btn" onClick={handleAiDelete}><IconTrash /> 删除</button>
+                      </div>
                     </div>
-                    <div className="ai-result-actions">
-                      <button className="ai-save-btn" disabled={saving} onClick={async () => { setSaving(true); try { await load(); } finally { setSaving(false); } }}>
-                        {saving ? '⏳ 保存中...' : '📦 存入资产库'}
-                      </button>
-                      <button className="ai-delete-btn" onClick={handleAiDelete}>🗑 删除</button>
+                  )}
+                  {aiGenerating && !aiResult && (
+                    <div className="ai-building-overlay">
+                      <span className="ai-spinner" /> 正在实时同步建模参数...
                     </div>
-                  </div>
+                  )}
                 </div>
               ) : (
                 <div className="ai-placeholder">
-                  <div className="ai-placeholder-icon">🎨</div>
-                  <div>预览区域</div>
-                  <div style={{ fontSize: 11, color: '#6e7681', marginTop: 4 }}>生成后将在此处展示 3D 预览</div>
+                  {aiGenerating ? (
+                    <div className="ai-building-wrapper">
+                      <div className="ai-building-grid" />
+                      <div className="ai-building-scanner" />
+                      <div className="ai-building-text">
+                        <span className="ai-spinner" />
+                        AI 正在构建 3D 实体...
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="ai-placeholder-icon"><IconSparkles /></div>
+                      <div>预览区域</div>
+                      <div style={{ fontSize: 11, color: '#6e7681', marginTop: 4 }}>生成后将在此处展示 3D 预览</div>
+                    </>
+                  )}
                 </div>
               )}
 
               {(aiLog.length > 0 || aiGenerating) && (
-                <div className="ai-log-panel">
-                  <div className="ai-log-title">
-                    {aiGenerating && <span className="ai-spinner" style={{ width: 10, height: 10, borderWidth: 1.5, marginRight: 6 }} />}
-                    🧠 推理日志
+                <div className={`ai-log-panel ${logCollapsed ? 'collapsed' : ''}`}>
+                  <div className="ai-log-title" onClick={() => setLogCollapsed(!logCollapsed)}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <IconTerminal /> 
+                      推理日志
+                      <span style={{ fontSize: 10, color: 'var(--text-secondary)', marginLeft: 8, fontWeight: 'normal' }}>
+                        Token: <b>{aiTokens && aiTokens.input > 0 ? aiTokens.input : Math.floor(aiPrompt.length * 1.5)}</b> in / 
+                        <b>{aiTokens && aiTokens.output > 0 ? aiTokens.output : Math.floor(aiLog.join('').length / 2)}</b> out
+                      </span>
+                    </div>
+                    <button className="log-collapse-btn" style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer' }}>
+                      {logCollapsed ? <IconChevronUp /> : <IconChevronDown />}
+                    </button>
                   </div>
                   <div className="ai-log-body">
                     {aiLog.map((line, i) => (
@@ -378,7 +409,7 @@ export function ModelLibraryPanel({ isStandalone = false }: { isStandalone?: boo
   return (
     <>
       <button className="model-lib-btn" onClick={() => setOpen(true)}>
-        <span className="model-lib-icon">📦</span>
+        <IconBox />
         <span>资产库</span>
         {models.length > 0 && <span className="model-lib-count">{models.length}</span>}
       </button>

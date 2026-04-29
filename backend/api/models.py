@@ -7,7 +7,7 @@ from fastapi import APIRouter, UploadFile, File, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from backend.config import GODOT_DIR
-from backend.services.llm import llm_call, set_model
+from backend.services.llm import llm_call, set_model, get_token_usage
 from backend.tools.definitions import ai_model_tool
 from backend.services.glb_builder import build_glb
 from backend.services.asset_generator import get_system_prompt
@@ -155,7 +155,10 @@ async def ai_generate_model(req: AIGenerateRequest):
                 yield _sse({"step": "error", "msg": "模型生成失败：LLM 未返回零件数据"})
                 return
 
-            yield _sse({"step": "building", "msg": f"🔧 组装 {len(parts)} 个零件 → GLB..."})
+            # Get token usage from AI model generation
+            token_usage = get_token_usage()
+
+            yield _sse({"step": "building", "msg": f"🔧 组装 {len(parts)} 个零件 → GLB...", "tokens": token_usage})
 
             try:
                 glb_bytes = await asyncio.to_thread(build_glb, parts)
@@ -181,6 +184,7 @@ async def ai_generate_model(req: AIGenerateRequest):
                 "parts_count": len(parts),
                 "size_kb":     size_kb,
                 "url":         f"/api/models/custom/{filename}",
+                "tokens":      token_usage,
             })
 
         except Exception as e:
