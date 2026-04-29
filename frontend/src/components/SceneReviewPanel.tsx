@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { SceneSequence } from '../types';
 import { confirmReview, rejectReview, streamAiGenerateModel, type AIModelEvent } from '../services/api';
+import { ThreeModelPreview } from './ThreeModelPreview';
 
 interface Props {
   sid: string;
@@ -156,17 +157,30 @@ function AssetRegenerator({ actorId, currentAsset, model, onDone }: RegeneratorP
     let tokenBuf = '';
     try {
       await streamAiGenerateModel(prompt, (ev: AIModelEvent) => {
-        if (ev.step === 'token') {
+        if (ev.step === 'thinking') {
+          setLog(prev => {
+            const updated = [...prev];
+            const lastIdx = updated.length - 1;
+            if (lastIdx >= 0 && updated[lastIdx].startsWith('💭')) {
+              updated[lastIdx] = updated[lastIdx] + ev.msg;
+            } else {
+              updated.push('💭 ' + ev.msg);
+            }
+            return updated;
+          });
+        } else if (ev.step === 'token') {
           tokenBuf += ev.msg;
           setLog(prev => {
-            const last = prev[prev.length - 1];
-            if (last && last.startsWith('📝')) {
-              return [...prev.slice(0, -1), '📝 ' + tokenBuf];
+            const updated = [...prev];
+            if (updated.length > 0 && updated[updated.length - 1].startsWith('📝')) {
+              updated[updated.length - 1] = '📝 ' + tokenBuf;
+            } else {
+              updated.push('📝 ' + tokenBuf);
             }
-            return [...prev, '📝 ' + tokenBuf];
+            return updated;
           });
         } else if (ev.step === 'done') {
-          setLog(prev => [...prev, '✅ 生成成功！']);
+          setLog(prev => [...prev, '✨ 生成成功！']);
           if (ev.url) onDone(ev.url);
         } else if (ev.step === 'error') {
           setLog(prev => [...prev, '❌ ' + ev.msg]);
@@ -199,16 +213,11 @@ function AssetRegenerator({ actorId, currentAsset, model, onDone }: RegeneratorP
         </div>
         {!isComposite && currentAsset?.path && (
           <div className="asset-preview-container">
-            {/* @ts-ignore */}
-            <model-viewer
-              src={getAssetUrl(currentAsset.path)}
-              auto-rotate
-              camera-controls
-              shadow-intensity="1"
-              style={{ width: '100%', height: '100%', background: '#1a1a1a', borderRadius: '4px' }}
-            >
-              {/* @ts-ignore */}
-            </model-viewer>
+            {getAssetUrl(currentAsset.path) && (
+              <ThreeModelPreview
+                url={getAssetUrl(currentAsset.path) + (currentAsset.path.includes('?') ? '&' : '?') + 't=' + Date.now()}
+              />
+            )}
           </div>
         )}
       </div>

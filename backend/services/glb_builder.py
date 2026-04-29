@@ -255,6 +255,439 @@ def _extrude_mesh(cross_section: list[dict], depth: float):
     return verts, indices
 
 
+# ── Spline tube mesh (tube along 3D spline path) ────────────────────────────────
+
+def _spline_tube_mesh(points: list[dict], radius: float = 0.05, segs: int = 8, interp: int = 24):
+    """
+    Create a tube along a 3D Catmull-Rom spline defined by control points.
+    points: [{x, y, z}, ...] at least 2 points.
+    radius: tube radius.
+    segs: cross-section circle segments.
+    interp: interpolation steps between each pair of control points.
+    """
+    n = len(points)
+    if n < 2:
+        raise ValueError("spline_tube needs at least 2 points")
+    pts_3d = np.array([[float(p.get("x", 0)), float(p.get("y", 0)), float(p.get("z", 0))] for p in points], dtype=np.float32)
+
+    # Catmull-Rom interpolation
+    spline_pts = []
+    for i in range(n - 1):
+        p0 = pts_3d[max(i - 1, 0)]
+        p1 = pts_3d[i]
+        p2 = pts_3d[min(i + 1, n - 1)]
+        p3 = pts_3d[min(i + 2, n - 1)]
+        for t_i in range(interp):
+            t = t_i / interp
+            t2, t3 = t * t, t * t * t
+            pt = 0.5 * ((2 * p1) +
+                         (-p0 + p2) * t +
+                         (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 +
+                         (-p0 + 3 * p1 - 3 * p2 + p3) * t3)
+            spline_pts.append(pt)
+    spline_pts.append(pts_3d[-1])
+    spline_pts = np.array(spline_pts, dtype=np.float32)
+    n_spline = len(spline_pts)
+
+    # Build Frenet frames along the spline
+    tangents = np.zeros_like(spline_pts)
+    tangents[:-1] = spline_pts[1:] - spline_pts[:-1]
+    tangents[-1] = tangents[-2]
+    lengths = np.linalg.norm(tangents, axis=1, keepdims=True)
+    lengths[lengths == 0] = 1.0
+    tangents /= lengths
+
+    # Initial normal = cross(tangent, up) or fallback
+    up = np.array([0, 1, 0], dtype=np.float32)
+    normals = np.zeros_like(spline_pts)
+    binormals = np.zeros_like(spline_pts)
+    for i in range(n_spline):
+        t = tangents[i]
+        if abs(np.dot(t, up)) > 0.99:
+            up_local = np.array([1, 0, 0], dtype=np.float32)
+        else:
+            up_local = up
+        n_vec = np.cross(t, up_local)
+        n_len = np.linalg.norm(n_vec)
+        if n_len < 1e-8:
+            n_vec = np.array([1, 0, 0], dtype=np.float32)
+        else:
+            n_vec /= n_len
+        normals[i] = n_vec
+        binormals[i] = np.cross(t, n_vec)
+
+    # Smooth normals (parallel transport approximation)
+    for i in range(1, n_spline):
+        b = np.cross(tangents[i - 1], tangents[i])
+        b_len = np.linalg.norm(b)
+        if b_len > 1e-8:
+            angle = math.asin(min(b_len, 1.0))
+            b /= b_len
+            c, s = math.cos(angle), math.sin(angle)
+            normals[i] = normals[i] * c + np.cross(b, normals[i]) * s + b * np.dot(b, normals[i]) * (1 - c)
+            n_len = np.linalg.norm(normals[i])
+            if n_len > 1e-8:
+                normals[i] /= n_len
+            binormals[i] = np.cross(tangents[i], normals[i])
+
+    # Generate tube vertices
+    verts = []
+    for i in range(n_spline):
+        for j in range(segs):
+            theta = 2 * math.pi * j / segs
+            offset = normals[i] * math.cos(theta) * radius + binormals[i] * math.sin(theta) * radius
+            verts.append(spline_pts[i] + offset)
+    verts = np.array(verts, dtype=np.float32)
+
+    # Indices
+    idx = []
+    for i in range(n_spline - 1):
+        for j in range(segs):
+            jn = (j + 1) % segs
+            a = i * segs + j
+            b = i * segs + jn
+            c = (i + 1) * segs + jn
+            d = (i + 1) * segs + j
+            idx += [a, b, c, a, c, d]
+    # Cap start
+    center_s = len(verts)
+    verts_list = list(verts)
+    verts_list.append(spline_pts[0])
+    for j in range(segs):
+        jn = (j + 1) % segs
+        idx += [center_s, j, jn]
+    # Cap end
+    center_e = len(verts_list)
+    verts_list.append(spline_pts[-1])
+    base_e = (n_spline - 1) * segs
+    for j in range(segs):
+        jn = (j + 1) % segs
+        idx += [center_e, base_e + jn, base_e + j]
+    verts = np.array(verts_list, dtype=np.float32)
+    indices = np.array(idx, dtype=np.uint16)
+    return verts, indices
+
+
+# ── Deformed mesh (noise-displaced shape for organic surfaces) ────────────────
+
+def _simple_noise_3d(x: float, y: float, z: float, seed: int = 0) -> float:
+    """Simple hash-based pseudo-noise for vertex displacement."""
+    n = int(x * 73 + y * 179 + z * 283 + seed * 37) & 0x7FFFFFFF
+    n = ((n << 13) ^ n) & 0x7FFFFFFF
+    return (1.0 - ((n * (n * n * 15731 + 789221) + 1376312589) & 0x7FFFFFFF) / 1073741824.0) * 0.5
+
+
+def _fbm_noise(x: float, y: float, z: float, octaves: int = 3, seed: int = 0) -> float:
+    """Fractal Brownian Motion noise."""
+    value = 0.0
+    amplitude = 1.0
+    frequency = 1.0
+    for _ in range(octaves):
+        value += amplitude * _simple_noise_3d(x * frequency, y * frequency, z * frequency, seed)
+        amplitude *= 0.5
+        frequency *= 2.0
+        seed += 17
+    return value
+
+
+def _deformed_mesh(base_shape: str, size: dict, displacement: float = 0.15,
+                   detail: int = 2, seed: int = 42, spikes: float = 0.0):
+    """
+    Create an organic deformed mesh by displacing vertices along normals.
+    base_shape: 'sphere' | 'rock' (sphere with more displacement)
+    size: {x, y, z} bounding box
+    displacement: max displacement amount (fraction of size)
+    detail: subdivision level for icosphere (1-4)
+    spikes: extra spiky displacement (for thorns, crystals)
+    """
+    sx = float(size.get("x", 1.0))
+    sy = float(size.get("y", 1.0))
+    sz = float(size.get("z", 1.0))
+
+    # Start from icosphere
+    m = trimesh.creation.icosphere(subdivisions=detail)
+    verts = m.vertices.copy()
+
+    # Normalize to bounding box
+    for i in range(len(verts)):
+        v = verts[i]
+        # Scale to ellipsoid
+        v[0] *= sx / 2
+        v[1] *= sy / 2
+        v[2] *= sz / 2
+        # Compute displacement along normal direction
+        norm = np.linalg.norm(v)
+        if norm > 1e-8:
+            direction = v / norm
+        else:
+            direction = np.array([0, 1, 0])
+        # Noise-based displacement
+        noise_val = _fbm_noise(v[0] * 3, v[1] * 3, v[2] * 3, octaves=3, seed=seed)
+        disp = displacement * min(sx, sy, sz) * 0.5 * noise_val
+        # Add spike component
+        if spikes > 0:
+            spike_noise = _simple_noise_3d(v[0] * 8, v[1] * 8, v[2] * 8, seed + 100)
+            if spike_noise > 0.6:
+                disp += spikes * min(sx, sy, sz) * 0.3 * (spike_noise - 0.6) / 0.4
+        verts[i] = v + direction * disp
+
+    m.vertices = verts
+    # Recompute normals
+    m.fix_normals()
+    verts = np.ascontiguousarray(m.vertices, dtype=np.float32)
+    indices = np.ascontiguousarray(m.faces.flatten(), dtype=np.uint16)
+    return verts, indices
+
+
+# ── Tree mesh (procedural L-system tree) ──────────────────────────────────────
+
+def _tree_mesh(config: dict):
+    """
+    Generate a procedural tree using recursive branching.
+    config keys:
+      trunk_height: float (default 3.0)
+      trunk_radius: float (default 0.15)
+      branch_levels: int (default 3, max 4)
+      branch_count: int (default 3, branches per level)
+      branch_spread: float (default 0.8, angle spread)
+      branch_length_ratio: float (default 0.65, child/parent length)
+      branch_radius_ratio: float (default 0.55, child/parent radius)
+      leaf_type: 'sphere'|'cluster'|'none' (default 'sphere')
+      leaf_size: float (default 0.3)
+      leaf_color: dict (default green)
+      trunk_color: dict (default brown)
+      seed: int (default 42)
+    Returns list of (verts, indices, color_dict) tuples for each part.
+    """
+    import random as _rng
+    seed = int(config.get("seed", 42))
+    _rng.seed(seed)
+
+    trunk_h = float(config.get("trunk_height", 3.0))
+    trunk_r = float(config.get("trunk_radius", 0.15))
+    levels = min(int(config.get("branch_levels", 3)), 4)
+    branch_count = int(config.get("branch_count", 3))
+    spread = float(config.get("branch_spread", 0.8))
+    len_ratio = float(config.get("branch_length_ratio", 0.65))
+    rad_ratio = float(config.get("branch_radius_ratio", 0.55))
+    leaf_type = str(config.get("leaf_type", "sphere"))
+    leaf_size = float(config.get("leaf_size", 0.3))
+
+    trunk_color = config.get("trunk_color", {"r": 0.4, "g": 0.25, "b": 0.1})
+    leaf_color = config.get("leaf_color", {"r": 0.15, "g": 0.55, "b": 0.1})
+
+    parts = []  # list of (verts, indices, color, name)
+
+    def _add_cylinder_part(start, end, radius, color, name):
+        """Add a tapered cylinder between two 3D points."""
+        sx = radius * 2
+        sy = float(np.linalg.norm(np.array(end) - np.array(start)))
+        sz = radius * 2
+        if sy < 0.01:
+            return
+        # Generate cylinder mesh
+        segs = 8
+        rx, rz = sx / 2, sz / 2
+        h = sy / 2
+        cv, ci = _cylinder_mesh(sx, sy, sz, segs=segs)
+        # Compute rotation to align Y axis with (end-start) direction
+        direction = np.array(end, dtype=np.float32) - np.array(start, dtype=np.float32)
+        d_len = np.linalg.norm(direction)
+        if d_len < 1e-8:
+            return
+        direction /= d_len
+        # Default cylinder axis is Y
+        up = np.array([0, 1, 0], dtype=np.float32)
+        if abs(np.dot(direction, up)) > 0.999:
+            rot_axis = np.array([1, 0, 0], dtype=np.float32)
+            if direction[1] < 0:
+                angle = math.pi
+            else:
+                angle = 0.0
+        else:
+            rot_axis = np.cross(up, direction)
+            rot_axis /= np.linalg.norm(rot_axis)
+            angle = math.acos(np.clip(np.dot(up, direction), -1, 1))
+        # Rodrigues rotation
+        K = np.array([[0, -rot_axis[2], rot_axis[1]],
+                       [rot_axis[2], 0, -rot_axis[0]],
+                       [-rot_axis[1], rot_axis[0], 0]], dtype=np.float32)
+        R = np.eye(3, dtype=np.float32) + math.sin(angle) * K + (1 - math.cos(angle)) * (K @ K)
+        # Apply rotation and translation
+        center = (np.array(start, dtype=np.float32) + np.array(end, dtype=np.float32)) / 2
+        for i in range(len(cv)):
+            cv[i] = R @ cv[i] + center
+        parts.append((cv, ci, color, name))
+
+    def _branch(origin, direction, length, radius, level, name_prefix):
+        """Recursively generate branches."""
+        if level <= 0 or length < 0.05 or radius < 0.005:
+            return
+        end = [origin[i] + direction[i] * length for i in range(3)]
+        _add_cylinder_part(origin, end, radius, trunk_color, f"{name_prefix}_L{level}")
+
+        if level == 1 and leaf_type != "none":
+            # Add leaf cluster at branch tip
+            if leaf_type == "sphere":
+                lv, li = _sphere_mesh(leaf_size, leaf_size, leaf_size, rings=6, segs=8)
+                for i in range(len(lv)):
+                    lv[i] = [lv[i][0] + end[0], lv[i][1] + end[1], lv[i][2] + end[2]]
+                parts.append((lv, li, leaf_color, f"{name_prefix}_leaf"))
+            elif leaf_type == "cluster":
+                # Multiple small leaf spheres
+                for li_idx in range(5):
+                    offset = [_rng.uniform(-leaf_size, leaf_size) * 0.5,
+                              _rng.uniform(-leaf_size * 0.3, leaf_size * 0.5),
+                              _rng.uniform(-leaf_size, leaf_size) * 0.5]
+                    ls = leaf_size * _rng.uniform(0.5, 1.0)
+                    lv, li = _sphere_mesh(ls, ls, ls, rings=4, segs=6)
+                    for i in range(len(lv)):
+                        lv[i] = [lv[i][0] + end[0] + offset[0],
+                                  lv[i][1] + end[1] + offset[1],
+                                  lv[i][2] + end[2] + offset[2]]
+                    parts.append((lv, li, leaf_color, f"{name_prefix}_leaf_{li_idx}"))
+            return
+
+        # Generate child branches
+        for b in range(branch_count):
+            angle_h = spread * _rng.uniform(0.5, 1.0)
+            angle_around = 2 * math.pi * b / branch_count + _rng.uniform(-0.3, 0.3)
+            # Rotate direction
+            # Find perpendicular vectors
+            if abs(direction[1]) > 0.99:
+                perp1 = np.array([1, 0, 0], dtype=np.float32)
+            else:
+                perp1 = np.cross(direction, [0, 1, 0])
+                perp1 /= np.linalg.norm(perp1)
+            perp2 = np.cross(direction, perp1)
+            perp2 /= np.linalg.norm(perp2)
+            new_dir = (direction * math.cos(angle_h) +
+                       perp1 * math.sin(angle_h) * math.cos(angle_around) +
+                       perp2 * math.sin(angle_h) * math.sin(angle_around))
+            new_dir = new_dir / np.linalg.norm(new_dir)
+            # Slight upward bias
+            new_dir[1] = max(new_dir[1], 0.1)
+            new_dir = new_dir / np.linalg.norm(new_dir)
+            _branch(end, new_dir, length * len_ratio * _rng.uniform(0.8, 1.1),
+                    radius * rad_ratio, level - 1, f"{name_prefix}_b{b}")
+
+    # Generate trunk
+    trunk_origin = [0, 0, 0]
+    trunk_end = [0, trunk_h, 0]
+    _add_cylinder_part(trunk_origin, trunk_end, trunk_r, trunk_color, "trunk")
+
+    # Generate branches from top of trunk
+    for b in range(branch_count + 1):
+        angle_h = spread * _rng.uniform(0.6, 1.0)
+        angle_around = 2 * math.pi * b / (branch_count + 1) + _rng.uniform(-0.2, 0.2)
+        direction = np.array([math.sin(angle_h) * math.cos(angle_around),
+                              math.cos(angle_h),
+                              math.sin(angle_h) * math.sin(angle_around)], dtype=np.float32)
+        start_y = trunk_h * _rng.uniform(0.6, 0.95)
+        start = [0, start_y, 0]
+        branch_len = trunk_h * 0.5 * _rng.uniform(0.7, 1.0)
+        _branch(start, direction, branch_len, trunk_r * 0.6, levels, f"branch_{b}")
+
+    # Add canopy foliage at top (sphere of leaves)
+    if leaf_type == "sphere" and levels >= 2:
+        canopy_y = trunk_h * 0.85
+        canopy_r = trunk_h * 0.4
+        cv, ci = _deformed_mesh("sphere", {"x": canopy_r * 2, "y": canopy_r * 1.6, "z": canopy_r * 2},
+                                displacement=0.12, detail=2, seed=seed + 7)
+        for i in range(len(cv)):
+            cv[i] = [cv[i][0], cv[i][1] + canopy_y, cv[i][2]]
+        parts.append((cv, ci, leaf_color, "canopy"))
+
+    return parts
+
+
+# ── Blob mesh (metaball-like organic body) ────────────────────────────────────
+
+def _blob_mesh(config: dict):
+    """
+    Create a smooth organic body shape by blending spheres.
+    config keys:
+      spheres: list of {x, y, z, radius} - control spheres to blend
+      resolution: int (default 32, voxel resolution)
+      color: dict (default gray)
+    Uses trimesh implicit surface approximation.
+    """
+    spheres = config.get("spheres", [])
+    if not spheres:
+        # Default: single sphere
+        spheres = [{"x": 0, "y": 0.5, "z": 0, "radius": 0.5}]
+    resolution = int(config.get("resolution", 32))
+
+    # Compute bounding box
+    all_x = [float(s.get("x", 0)) + float(s.get("radius", 0.5)) for s in spheres] + \
+            [float(s.get("x", 0)) - float(s.get("radius", 0.5)) for s in spheres]
+    all_y = [float(s.get("y", 0)) + float(s.get("radius", 0.5)) for s in spheres] + \
+            [float(s.get("y", 0)) - float(s.get("radius", 0.5)) for s in spheres]
+    all_z = [float(s.get("z", 0)) + float(s.get("radius", 0.5)) for s in spheres] + \
+            [float(s.get("z", 0)) - float(s.get("radius", 0.5)) for s in spheres]
+    pad = 0.1
+    bounds = [[min(all_x) - pad, max(all_x) + pad],
+              [min(all_y) - pad, max(all_y) + pad],
+              [min(all_z) - pad, max(all_z) + pad]]
+
+    # Create SDF grid
+    from trimesh.voxel import creation as vcreation
+    try:
+        # Try marching cubes via skimage
+        from skimage import measure as sk_measure
+        grid = np.zeros((resolution, resolution, resolution), dtype=np.float32)
+        for ix in range(resolution):
+            for iy in range(resolution):
+                for iz in range(resolution):
+                    wx = bounds[0][0] + (bounds[0][1] - bounds[0][0]) * ix / (resolution - 1)
+                    wy = bounds[1][0] + (bounds[1][1] - bounds[1][0]) * iy / (resolution - 1)
+                    wz = bounds[2][0] + (bounds[2][1] - bounds[2][0]) * iz / (resolution - 1)
+                    val = 0.0
+                    for s in spheres:
+                        sx, sy, sz = float(s.get("x", 0)), float(s.get("y", 0)), float(s.get("z", 0))
+                        sr = float(s.get("radius", 0.5))
+                        dist = math.sqrt((wx - sx) ** 2 + (wy - sy) ** 2 + (wz - sz) ** 2)
+                        # Metaball field function
+                        val += (sr ** 3) / (dist ** 3 + 0.001)
+                    grid[ix, iy, iz] = val
+
+        # Marching cubes at threshold = 1.0
+        spacing = [(bounds[a][1] - bounds[a][0]) / (resolution - 1) for a in range(3)]
+        verts_mc, faces_mc, _, _ = sk_measure.marching_cubes(grid, level=1.0, spacing=spacing)
+        verts_mc += np.array([bounds[0][0], bounds[1][0], bounds[2][0]])
+        verts_out = np.ascontiguousarray(verts_mc, dtype=np.float32)
+        indices_out = np.ascontiguousarray(faces_mc.flatten(), dtype=np.uint16)
+        # Check index range
+        if indices_out.max() >= len(verts_out):
+            indices_out = indices_out.astype(np.uint32)
+        return verts_out, indices_out
+    except ImportError:
+        # Fallback: simple union of spheres via trimesh
+        meshes = []
+        for s in spheres:
+            sx, sy, sz = float(s.get("x", 0)), float(s.get("y", 0)), float(s.get("z", 0))
+            sr = float(s.get("radius", 0.5))
+            m = trimesh.creation.icosphere(subdivisions=2)
+            m.apply_scale(sr)
+            m.apply_translation([sx, sy, sz])
+            meshes.append(m)
+        if len(meshes) == 1:
+            result = meshes[0]
+        else:
+            result = meshes[0]
+            for m in meshes[1:]:
+                try:
+                    result = result.union(m)
+                except Exception:
+                    result = result.union(m)
+        result.fix_normals()
+        verts_out = np.ascontiguousarray(result.vertices, dtype=np.float32)
+        indices_out = np.ascontiguousarray(result.faces.flatten(), dtype=np.uint16)
+        if indices_out.max() >= len(verts_out):
+            indices_out = indices_out.astype(np.uint32)
+        return verts_out, indices_out
+
+
 # ── Procedural texture generator ─────────────────────────────────────────────
 
 _TEX_SIZE = 256
@@ -554,6 +987,64 @@ def build_glb(parts: list[dict]) -> bytes:
             cross_section = part.get("cross_section", [])
             depth = float(part.get("extrude_depth", 0.5))
             verts, indices = _extrude_mesh(cross_section, depth)
+        elif shape == "spline_tube":
+            spline_points = part.get("points", [])
+            spline_radius = float(part.get("radius", 0.05))
+            spline_segs = int(part.get("segments", 8))
+            spline_interp = int(part.get("interp_steps", 24))
+            verts, indices = _spline_tube_mesh(spline_points, spline_radius, spline_segs, spline_interp)
+            pos = {"x": 0, "y": 0, "z": 0}
+            rot = {"x": 0, "y": 0, "z": 0}
+        elif shape == "deformed":
+            disp = float(part.get("displacement", 0.15))
+            detail = int(part.get("detail", 2))
+            seed = int(part.get("seed", 42))
+            spikes = float(part.get("spikes", 0.0))
+            verts, indices = _deformed_mesh("sphere", size, disp, detail, seed, spikes)
+            pos = {"x": 0, "y": 0, "z": 0}
+            rot = {"x": 0, "y": 0, "z": 0}
+        elif shape == "blob":
+            blob_config = part.get("blob_config", {})
+            verts, indices = _blob_mesh(blob_config)
+            pos = {"x": 0, "y": 0, "z": 0}
+            rot = {"x": 0, "y": 0, "z": 0}
+        elif shape == "tree":
+            tree_config = part.get("tree_config", {})
+            tree_parts = _tree_mesh(tree_config)
+            # Tree generates multiple sub-parts; we add them all as separate meshes
+            for tp_idx, (tv, ti, tc, tn) in enumerate(tree_parts):
+                tp_pos_acc = _add_accessor_f32(tv, pygltflib.VEC3)
+                tp_idx_acc = _add_accessor_u16(ti)
+                tp_mat_idx = len(gltf.materials)
+                tr = min(1.0, max(0.0, float(tc.get("r", 0.7))))
+                tg = min(1.0, max(0.0, float(tc.get("g", 0.7))))
+                tb = min(1.0, max(0.0, float(tc.get("b", 0.7))))
+                gltf.materials.append(pygltflib.Material(
+                    name=f"{name}_{tn}_mat",
+                    pbrMetallicRoughness=pygltflib.PbrMetallicRoughness(
+                        baseColorFactor=[tr, tg, tb, 1.0],
+                        metallicFactor=float(part.get("metallic", 0.0)),
+                        roughnessFactor=float(part.get("roughness", 0.9)),
+                    ),
+                    doubleSided=True,
+                ))
+                tp_mesh_idx = len(gltf.meshes)
+                gltf.meshes.append(pygltflib.Mesh(
+                    name=f"{name}_{tn}",
+                    primitives=[pygltflib.Primitive(
+                        attributes=pygltflib.Attributes(POSITION=tp_pos_acc),
+                        indices=tp_idx_acc,
+                        material=tp_mat_idx,
+                    )],
+                ))
+                tp_node_idx = len(gltf.nodes)
+                gltf.nodes.append(pygltflib.Node(
+                    name=f"{name}_{tn}",
+                    mesh=tp_mesh_idx,
+                    translation=[0, 0, 0],
+                ))
+                gltf.scenes[0].nodes.append(tp_node_idx)
+            continue  # skip the normal single-part processing below
         elif shape == "sphere":
             verts, indices = _sphere_mesh(sx/2, sy/2, sz/2)
         elif shape == "cylinder":

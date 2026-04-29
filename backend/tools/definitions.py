@@ -293,7 +293,7 @@ asset_tool: dict = {
                                     "properties": {
                                         "name": {"type": "string", "description": "部件名称，用于动画控制"},
                                         "parent_name": {"type": "string", "description": "父部件名称。如果设置了，该部件的位置将相对于父部件坐标系。用于构建关节点（如手臂挂在身体上）。"},
-                                        "shape": {"type": "string", "enum": ["box", "sphere", "cylinder", "cone", "capsule"]},
+                                        "shape": {"type": "string", "enum": ["box", "sphere", "cylinder", "cone", "capsule", "tree", "spline_tube", "deformed", "blob"]},
                                         "size": VEC3,
                                         "position": {**VEC3, "description": "相对局部坐标"},
                                         "rotation": {**VEC3, "description": "欧拉角旋转（度）"},
@@ -321,10 +321,18 @@ ai_model_tool: dict = {
     "function": {
         "name": "build_model",
         "description": (
-            "根据自然语言描述，用基本体拼装一个 3D 模型。"
-            "可用形状：box/sphere/cylinder/cone/capsule/lathe(旋转体)/extrude(挤出体)。"
-            "可用材质：颜色(RGBA)、金属度、粗糙度、自发光、程序化纹理。"
-            "可用操作：CSG布尔运算(subtract挖洞/intersect交集/union合并)。"
+            "根据自然语言描述，用基本体或有机形状生成器构建一个 3D 模型。"
+            "可用形状：\n"
+            "  基本体: box/sphere/cylinder/cone/capsule/lathe(旋转体)/extrude(挤出体)\n"
+            "  有机形状: tree(程序化树木)/spline_tube(样条管)/deformed(噪声变形体)/blob(融合球)\n"
+            "可用材质：颜色(RGBA)、金属度、粗糙度、自发光、程序化纹理。\n"
+            "可用操作：CSG布尔运算(subtract挖洞/intersect交集/union合并)。\n"
+            "\n"
+            "★ 有机形状说明：\n"
+            "  tree: 程序化生成树干+分支+树叶，只需指定高度/半径等参数，自动生成完整树形\n"
+            "  spline_tube: 沿3D样条曲线生成管状体，适合尾巴/触手/藤蔓/蛇等弯曲形体\n"
+            "  deformed: 带噪声位移的球体，适合岩石/山丘/有机团块\n"
+            "  blob: 多个球体融合成光滑有机体，适合动物身体/云朵/软体\n"
             "输出每个零件的形状、尺寸、位置、旋转、颜色和材质属性。"
             "所有零件合并后就是这个模型的 GLB 文件。"
         ),
@@ -346,14 +354,14 @@ ai_model_tool: dict = {
                         "type": "object",
                         "properties": {
                             "name":  {"type": "string",  "description": "零件名称，如 torso/head/hat_brim"},
-                            "shape": {"type": "string",  "enum": ["box", "sphere", "cylinder", "cone", "capsule"],
-                                      "description": "基本体形状：box=长方体, sphere=球体, cylinder=圆柱, cone=圆锥/锥形, capsule=胶囊(圆柱+半球端,适合人体躯干/肢体)"},
+                            "shape": {"type": "string", "enum": ["box", "sphere", "cylinder", "cone", "capsule", "tree", "spline_tube", "deformed", "blob"],
+                                      "description": "形状类型。基本体: box/sphere/cylinder/cone/capsule。有机形状: tree=程序化树木, spline_tube=样条管(尾巴/触手), deformed=噪声变形体(岩石/有机块), blob=融合球(动物身体)"},
                             "size": {
                                 "type": "object",
                                 "properties": {
                                     "x": {"type": "number"}, "y": {"type": "number"}, "z": {"type": "number"}
                                 },
-                                "description": "零件包围盒尺寸（米）"
+                                "description": "零件包围盒尺寸（米）。tree/deformed/blob 形状也需要此字段指定整体尺寸"
                             },
                             "position": {
                                 "type": "object",
@@ -391,6 +399,65 @@ ai_model_tool: dict = {
                                     "intensity": {"type": "number", "description": "发光强度倍数(0-5)"}
                                 },
                                 "description": "自发光，用于灯/火焰/魔法。普通物体不设置"
+                            },
+                            # ── 有机形状专用参数 ──
+                            "tree_config": {
+                                "type": "object",
+                                "description": "tree 形状专用参数。shape='tree' 时必填",
+                                "properties": {
+                                    "trunk_height":     {"type": "number", "description": "树干高度（米），默认3.0"},
+                                    "trunk_radius":     {"type": "number", "description": "树干半径（米），默认0.15"},
+                                    "branch_levels":     {"type": "integer", "description": "分支递归层数(1-4)，默认3。越大越茂密"},
+                                    "branch_count":      {"type": "integer", "description": "每层分支数，默认3"},
+                                    "branch_spread":     {"type": "number", "description": "分支展开角度(0.3-1.5)，默认0.8"},
+                                    "leaf_type":         {"type": "string", "enum": ["sphere", "cluster", "none"], "description": "树叶类型: sphere=球形树冠, cluster=散叶, none=枯树"},
+                                    "leaf_size":         {"type": "number", "description": "树叶/树冠大小（米），默认0.3"},
+                                    "trunk_color":       {"type": "object", "description": "树干颜色 {r,g,b}，默认棕色"},
+                                    "leaf_color":        {"type": "object", "description": "树叶颜色 {r,g,b}，默认绿色"},
+                                    "seed":              {"type": "integer", "description": "随机种子，改变树的具体形态"}
+                                }
+                            },
+                            "points": {
+                                "type": "array",
+                                "description": "spline_tube 形状的3D控制点列表 [{x,y,z},...]。shape='spline_tube' 时必填",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {"x": {"type": "number"}, "y": {"type": "number"}, "z": {"type": "number"}}
+                                }
+                            },
+                            "radius": {
+                                "type": "number",
+                                "description": "spline_tube 的管半径（米），默认0.05"
+                            },
+                            "displacement": {
+                                "type": "number",
+                                "description": "deformed 形状的噪声位移强度(0.05-0.5)，默认0.15。越大越凹凸"
+                            },
+                            "spikes": {
+                                "type": "number",
+                                "description": "deformed 形状的尖刺强度(0-1)，默认0。用于仙人掌/水晶等"
+                            },
+                            "seed": {
+                                "type": "integer",
+                                "description": "deformed/tree 形状的随机种子，改变具体形态"
+                            },
+                            "blob_config": {
+                                "type": "object",
+                                "description": "blob 形状专用参数。shape='blob' 时必填",
+                                "properties": {
+                                    "spheres": {
+                                        "type": "array",
+                                        "description": "控制球列表 [{x,y,z,radius},...]，它们会融合成一个光滑有机体",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "x": {"type": "number"}, "y": {"type": "number"}, "z": {"type": "number"},
+                                                "radius": {"type": "number", "description": "球体半径"}
+                                            }
+                                        }
+                                    },
+                                    "resolution": {"type": "integer", "description": "体素分辨率(16-64)，默认32。越大越精细但越慢"}
+                                }
                             }
                         },
                         "required": ["name", "shape", "size", "position", "color"]

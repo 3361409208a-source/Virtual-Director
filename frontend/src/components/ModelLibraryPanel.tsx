@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { ModelMeta, AIGenerateResult, AIModelEvent } from '../services/api';
 import { listModels, uploadModel, deleteCustomModel, streamAiGenerateModel } from '../services/api';
+import { ThreeModelPreview } from './ThreeModelPreview';
 
 const CAT_LABEL: Record<string, string> = {
   builtin:    '内置',
@@ -129,6 +130,7 @@ export function ModelLibraryPanel({ isStandalone = false }: { isStandalone?: boo
         aiLlm,
         aiBaseModel?.name ?? '',
       );
+      tokenBuf = ''; // Reset for next use
     } catch (e) {
       setAiError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -288,8 +290,7 @@ export function ModelLibraryPanel({ isStandalone = false }: { isStandalone?: boo
               {aiResult ? (
                 <div className="ai-result">
                   <div className="ai-result-viewer">
-                    {/* @ts-ignore */}
-                    <model-viewer src={`http://localhost:8000${aiResult.url}?t=${Date.now()}`} auto-rotate camera-controls style={{ width: '100%', height: '100%' }} />
+                    <ThreeModelPreview url={`${aiResult.url}?t=${Date.now()}`} />
                   </div>
                   <div className="ai-result-info">
                     <div className="ai-result-name">{aiResult.model_name}</div>
@@ -300,7 +301,7 @@ export function ModelLibraryPanel({ isStandalone = false }: { isStandalone?: boo
                     </div>
                     <div className="ai-result-actions">
                       <button className="ai-save-btn" disabled={saving} onClick={async () => { setSaving(true); try { await load(); } finally { setSaving(false); } }}>
-                        {saving ? '⏳ 保存中...' : '✅ 存入资产库'}
+                        {saving ? '⏳ 保存中...' : '📦 存入资产库'}
                       </button>
                       <button className="ai-delete-btn" onClick={handleAiDelete}>🗑 删除</button>
                     </div>
