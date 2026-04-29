@@ -53,6 +53,7 @@ def run_scene_agent(prompt: str, director: dict, scene_ctx: dict, token_cb=None)
         "太空：放置 3-5 个星球/陨石（大尺寸，距离 z=-200 至 z=-500）；\n"
         "道具 Y 坐标：地面物体 Y=0；悬挂/飘浮物体根据实际高度设定。\n\n"
 
+        f"【道具命名要求】：必须从以下 ID 列表中选择道具进行布置: {director.get('prop_ids', [])}\n\n"
         "【坐标约定】：主干道/跑道沿 Z 轴延伸，X 轴为左右，Y=0 为地面。\n\n"
         f"场景系统参数表: {json.dumps(scene_ctx.get('scene_setup_capabilities', {}), ensure_ascii=False)}"
     )

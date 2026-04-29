@@ -16,6 +16,7 @@ const WELCOME: Message = {
 
 export type ModelSelection = 'deepseek-chat' | 'deepseek-reasoner' | 'deepseek-v4-flash' | 'deepseek-v4-pro' | 'GLM-4.7-Flash' | 'astron-code-latest';
 export type RendererSelection = 'godot' | 'blender';
+export type ViewMode = 'director' | 'modeling' | 'library';
 
 export default function App() {
   const [messages, setMessages]       = useState<Message[]>([WELCOME]);
@@ -29,6 +30,7 @@ export default function App() {
   const [streamLog, setStreamLog]      = useState<Record<string, unknown>[]>([]);
 
   const [viewingProject, setViewingProject] = useState<{ id: string; videoUrl: string | null } | null>(null);
+  const [view, setView] = useState<ViewMode>('director');
 
   // ── 半自动审核状态 ──────────────────────────────────────────────────────────
   const [reviewState, setReviewState] = useState<{
@@ -80,16 +82,14 @@ export default function App() {
         }
         const raw = event as unknown as Record<string, unknown>;
         if (raw.step === 'stream') {
-          flushSync(() => {
-            setStreamLog(prev => {
-              const idx = prev.findIndex(e => e.step === 'stream' && e.agent === raw.agent);
-              if (idx >= 0) {
-                const updated = [...prev];
-                updated[idx] = { ...updated[idx], msg: String(updated[idx].msg ?? '') + String(raw.msg ?? '') };
-                return updated;
-              }
-              return [...prev, raw];
-            });
+          setStreamLog(prev => {
+            const idx = prev.findIndex(e => e.step === 'stream' && e.agent === raw.agent);
+            if (idx >= 0) {
+              const updated = [...prev];
+              updated[idx] = { ...updated[idx], msg: String(updated[idx].msg ?? '') + String(raw.msg ?? '') };
+              return updated;
+            }
+            return [...prev, raw];
           });
         } else {
           setStreamLog(prev => [...prev, raw]);
@@ -98,16 +98,18 @@ export default function App() {
         // ── 半自动：收到 scene_preview 后进入审核等待模式 ──────────────────
         if (event.step === 'scene_preview' && event.sequence && event.review_sid) {
           setReviewState({ sid: event.review_sid, sequence: event.sequence });
-          // isRendering 保持 true，让 VideoPlayer 继续显示进度（但实际挂起等用户确认）
+          setView('modeling'); // 自动跳转到建模页面
         }
 
         if (event.step === 'done') {
           if (event.video_url) setVideoUrl(event.video_url);
           setIsRendering(false);
           setReviewState(null);
+          setView('director'); // 完成后回到导演页面
         } else if (event.step === 'error') {
           setIsRendering(false);
           setReviewState(null);
+          setView('director');
         }
       }, model, renderer);
     } catch (err: unknown) {
@@ -122,67 +124,113 @@ export default function App() {
   };
 
   return (
-    <div className="app-container">
-      <ChatPanel
-        messages={messages}
-        input={input}
-        isRendering={isRendering}
-        model={model}
-        renderer={renderer}
-        onInputChange={setInput}
-        onSend={handleSend}
-        onModelChange={setModel}
-        onRendererChange={setRenderer}
-        isTesting={isTesting}
-        testMsg={testMsg}
-        onTestRender={async (r) => {
-          setIsTesting(true);
-          setTestMsg('');
-          setVideoUrl(null);
-          try {
-            await streamTestRender(r, ev => {
-              setTestMsg(ev.msg);
-              if (ev.step === 'test_done') {
-                if ((ev as unknown as Record<string, unknown>).video_url) setVideoUrl(`http://localhost:8000/api/test-video/${r}?t=${Date.now()}`);
-                setIsTesting(false);
-              } else if (ev.step === 'test_error') {
-                setIsTesting(false);
-              }
-            });
-          } catch (e) {
-            setTestMsg(`❌ 请求失败: ${e instanceof Error ? e.message : String(e)}`);
-            setIsTesting(false);
-          }
-        }}
-      />
-      <VideoPlayer videoUrl={viewingProject?.videoUrl ?? videoUrl} isRendering={isRendering && !reviewState} streamLog={streamLog} />
-      <ProjectPanel
-        activeProjectId={viewingProject?.id ?? null}
-        onSelectProject={(pid) => {
-          if (pid) {
-            setViewingProject({ id: pid, videoUrl: projectVideoUrl(pid) });
-          } else {
-            setViewingProject(null);
-          }
-        }}
-      />
-      <ModelLibraryPanel />
+    <div className="app-layout">
+      {/* 侧边导航栏 */}
+      <nav className="side-nav">
+        <div className="nav-logo">🎬</div>
+        <button className={`nav-item ${view === 'director' ? 'active' : ''}`} onClick={() => setView('director')} title="导演中心">
+          <span className="nav-icon">📽️</span>
+          <span className="nav-label">导演</span>
+        </button>
+        <button className={`nav-item ${view === 'modeling' ? 'active' : ''}`} onClick={() => setView('modeling')} title="AI 建模">
+          <span className="nav-icon">🎨</span>
+          <span className="nav-label">建模</span>
+        </button>
+        <button className={`nav-item ${view === 'library' ? 'active' : ''}`} onClick={() => setView('library')} title="资产库">
+          <span className="nav-icon">📦</span>
+          <span className="nav-label">资产</span>
+        </button>
+      </nav>
 
-      {/* 半自动审核面板：覆盖整个界面，等待用户操作 */}
-      {reviewState && (
-        <SceneReviewPanel
-          sid={reviewState.sid}
-          sequence={reviewState.sequence}
-          onConfirmed={() => {
-            // 告知用户已确认，UI 恢复渲染等待状态
-            setReviewState(null);
-          }}
-          onRejected={() => {
-            setReviewState(null);
-            setIsRendering(false);
-          }}
-        />
-      )}
+      <main className="main-stage">
+        {view === 'director' && (
+          <div className="director-view">
+            <ChatPanel
+              messages={messages}
+              input={input}
+              isRendering={isRendering}
+              model={model}
+              renderer={renderer}
+              onInputChange={setInput}
+              onSend={handleSend}
+              onModelChange={setModel}
+              onRendererChange={setRenderer}
+              isTesting={isTesting}
+              testMsg={testMsg}
+              onTestRender={async (r) => {
+                setIsTesting(true);
+                setTestMsg('');
+                setVideoUrl(null);
+                try {
+                  await streamTestRender(r, ev => {
+                    setTestMsg(ev.msg);
+                    if (ev.step === 'test_done') {
+                      if ((ev as unknown as Record<string, unknown>).video_url) setVideoUrl(`http://localhost:8000/api/test-video/${r}?t=${Date.now()}`);
+                      setIsTesting(false);
+                    } else if (ev.step === 'test_error') {
+                      setIsTesting(false);
+                    }
+                  });
+                } catch (e) {
+                  setTestMsg(`❌ 请求失败: ${e instanceof Error ? e.message : String(e)}`);
+                  setIsTesting(false);
+                }
+              }}
+            />
+            <div className="center-content">
+              <VideoPlayer videoUrl={viewingProject?.videoUrl ?? videoUrl} isRendering={isRendering && !reviewState} streamLog={streamLog} />
+              <ProjectPanel
+                activeProjectId={viewingProject?.id ?? null}
+                onSelectProject={(pid) => {
+                  if (pid) {
+                    setViewingProject({ id: pid, videoUrl: projectVideoUrl(pid) });
+                  } else {
+                    setViewingProject(null);
+                  }
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        {view === 'modeling' && (
+          <div className="modeling-view">
+            {reviewState ? (
+              <SceneReviewPanel
+                key={reviewState.sid}
+                sid={reviewState.sid}
+                sequence={reviewState.sequence}
+                model={model}
+                onConfirmed={() => {
+                  setReviewState(null);
+                  // 后端会自动继续，这里我们回到导演页面看进度
+                  setView('director');
+                }}
+                onRejected={() => {
+                  setReviewState(null);
+                  setIsRendering(false);
+                  setView('director');
+                }}
+              />
+            ) : (
+              <div className="modeling-placeholder">
+                <div className="placeholder-content">
+                  <span className="placeholder-icon">🎨</span>
+                  <h2>AI 建模工作室</h2>
+                  <p>当前没有正在进行的建模任务。请在导演中心发起新的创作请求。</p>
+                  <button className="go-home-btn" onClick={() => setView('director')}>回到导演中心</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {view === 'library' && (
+          <div className="library-view">
+             <ModelLibraryPanel isStandalone={true} />
+          </div>
+        )}
+      </main>
     </div>
   );
 }

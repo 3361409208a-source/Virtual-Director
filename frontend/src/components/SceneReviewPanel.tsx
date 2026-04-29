@@ -1,11 +1,11 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { SceneSequence } from '../types';
-import { ScenePreview } from './ScenePreview';
 import { confirmReview, rejectReview, streamAiGenerateModel, type AIModelEvent } from '../services/api';
 
 interface Props {
   sid: string;
   sequence: SceneSequence;
+  model: string;
   onConfirmed: () => void;
   onRejected: () => void;
 }
@@ -24,6 +24,21 @@ function tryParse(s: string): { ok: true; value: unknown } | { ok: false; error:
   } catch (e) {
     return { ok: false, error: String(e) };
   }
+}
+
+function getAssetUrl(path: string): string | null {
+  if (!path) return null;
+  // Expected path format: "assets/category/filename.glb"
+  // API format: "/api/models/category/filename"
+  const parts = path.split('/');
+  if (parts.length >= 3) {
+    const cat = parts[parts.length - 2];
+    const file = parts[parts.length - 1];
+    return `/api/models/${cat}/${file}`;
+  }
+  // Fallback: if it's already a full URL
+  if (path.startsWith('http') || path.startsWith('/')) return path;
+  return null;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -121,11 +136,15 @@ function EditableBlock({ label, icon, data, onChange }: BlockProps) {
 interface RegeneratorProps {
   actorId: string;
   currentAsset: any;
+  model: string;
   onDone: (newPath: string) => void;
 }
 
-function AssetRegenerator({ actorId, currentAsset, onDone }: RegeneratorProps) {
-  const [prompt, setPrompt] = useState(actorId.replace(/_/g, ' '));
+function AssetRegenerator({ actorId, currentAsset, model, onDone }: RegeneratorProps) {
+  const safeId = actorId || 'object';
+  // 使用当前资产名称或 ID 作为初始描述，并去除下划线
+  const initialPrompt = currentAsset?.name || safeId.replace(/_/g, ' ');
+  const [prompt, setPrompt] = useState(initialPrompt);
   const [generating, setGenerating] = useState(false);
   const [log, setLog] = useState<string[]>([]);
   const logEndRef = useRef<HTMLDivElement>(null);
@@ -155,7 +174,7 @@ function AssetRegenerator({ actorId, currentAsset, onDone }: RegeneratorProps) {
           tokenBuf = '';
           setLog(prev => [...prev, ev.msg]);
         }
-      });
+      }, model);
     } catch (e) {
       setLog(prev => [...prev, '❌ ' + String(e)]);
     } finally {
@@ -171,11 +190,27 @@ function AssetRegenerator({ actorId, currentAsset, onDone }: RegeneratorProps) {
 
   return (
     <div className="asset-regen-item">
-      <div className="asset-regen-info">
-        <span className="asset-regen-id">🎭 {actorId}</span>
-        <span className="asset-regen-status">
-          {isComposite ? '🧱 积木拼装' : `🧊 外部模型: ${currentAsset?.path?.split('/').pop()}`}
-        </span>
+      <div className="asset-regen-header">
+        <div className="asset-regen-info">
+          <span className="asset-regen-id">🎭 {safeId}</span>
+          <span className="asset-regen-status">
+            {isComposite ? '🧱 积木拼装' : `🧊 外部模型: ${currentAsset?.path?.split('/').pop()}`}
+          </span>
+        </div>
+        {!isComposite && currentAsset?.path && (
+          <div className="asset-preview-container">
+            {/* @ts-ignore */}
+            <model-viewer
+              src={getAssetUrl(currentAsset.path)}
+              auto-rotate
+              camera-controls
+              shadow-intensity="1"
+              style={{ width: '100%', height: '100%', background: '#1a1a1a', borderRadius: '4px' }}
+            >
+              {/* @ts-ignore */}
+            </model-viewer>
+          </div>
+        )}
       </div>
       
       <div className="asset-regen-controls">
@@ -183,6 +218,7 @@ function AssetRegenerator({ actorId, currentAsset, onDone }: RegeneratorProps) {
           className="asset-regen-input"
           value={prompt}
           onChange={e => setPrompt(e.target.value)}
+          onMouseDown={e => e.stopPropagation()}
           placeholder="描述你想要的样子..."
           disabled={generating}
         />
@@ -209,10 +245,10 @@ function AssetRegenerator({ actorId, currentAsset, onDone }: RegeneratorProps) {
 // Main Panel
 // ────────────────────────────────────────────────────────────────────────────
 
-export function SceneReviewPanel({ sid, sequence: initialSequence, onConfirmed, onRejected }: Props) {
+export function SceneReviewPanel({ sid, sequence: initialSequence, model, onConfirmed, onRejected }: Props) {
   const [seq, setSeq] = useState<SceneSequence>(initialSequence);
   const [loading, setLoading] = useState<'confirm' | 'reject' | null>(null);
-  const [activeTab, setActiveTab] = useState<'map' | 'data' | 'assets'>('map');
+  const [activeTab, setActiveTab] = useState<'data' | 'assets'>('assets');
 
   const update = useCallback(<K extends keyof SceneSequence>(key: K, val: SceneSequence[K]) => {
     setSeq(prev => ({ ...prev, [key]: val }));
@@ -241,8 +277,8 @@ export function SceneReviewPanel({ sid, sequence: initialSequence, onConfirmed, 
   };
 
   return (
-    <div className="scene-review-overlay">
-      <div className="scene-review-panel">
+    <div className="scene-review-overlay" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="scene-review-panel" onMouseDown={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="scene-review-header">
           <div className="scene-review-title">
@@ -271,12 +307,6 @@ export function SceneReviewPanel({ sid, sequence: initialSequence, onConfirmed, 
         {/* Tabs */}
         <div className="scene-review-tabs">
           <button
-            className={`review-tab ${activeTab === 'map' ? 'active' : ''}`}
-            onClick={() => setActiveTab('map')}
-          >
-            分镜地图
-          </button>
-          <button
             className={`review-tab ${activeTab === 'assets' ? 'active' : ''}`}
             onClick={() => setActiveTab('assets')}
           >
@@ -292,36 +322,21 @@ export function SceneReviewPanel({ sid, sequence: initialSequence, onConfirmed, 
 
         {/* Content */}
         <div className="scene-review-content">
-          {activeTab === 'map' && (
-            <div className="scene-review-map">
-              <ScenePreview sequence={seq} />
-              <div className="scene-review-meta-grid">
-                <div className="meta-item">
-                  <span className="meta-label">总时长</span>
-                  <span className="meta-value">{seq.meta?.total_duration ?? '?'}s</span>
-                </div>
-                <div className="meta-item">
-                  <span className="meta-label">演员数</span>
-                  <span className="meta-value">{seq.actors?.length ?? 0}</span>
-                </div>
-                <div className="meta-item">
-                  <span className="meta-label">摄影节点</span>
-                  <span className="meta-value">{seq.camera_track?.length ?? 0}</span>
-                </div>
-              </div>
-            </div>
-          )}
 
           {activeTab === 'assets' && (
             <div className="scene-review-assets">
               <div className="review-section-hint">
                 💡 如果 AI 下载或拼装的模型不满意，可以在此处输入描述重新生成专属 GLB 模型。
               </div>
-              {seq.actors.map(actor => (
+              {(seq.actors ?? []).map((actor, idx) => {
+                // actors 可能用 actor_id 或 id 字段
+                const aid: string = actor.actor_id ?? actor.id ?? `actor_${idx}`;
+                return (
                 <AssetRegenerator
-                  key={actor.actor_id}
-                  actorId={actor.actor_id}
-                  currentAsset={seq.asset_manifest?.[actor.actor_id]}
+                  key={aid + '_' + idx}
+                  actorId={aid}
+                  currentAsset={seq.asset_manifest?.[aid]}
+                  model={model}
                   onDone={(newUrl) => {
                     // Update asset_manifest with the new model
                     const newFilename = newUrl.split('/').pop() || '';
@@ -330,8 +345,8 @@ export function SceneReviewPanel({ sid, sequence: initialSequence, onConfirmed, 
                       ...prev,
                       asset_manifest: {
                         ...prev.asset_manifest,
-                        [actor.actor_id]: {
-                          actor_id: actor.actor_id,
+                        [aid]: {
+                          actor_id: aid,
                           type: 'downloaded',
                           path: newPath,
                           target_size: { x: 1, y: 1, z: 1 }
@@ -340,7 +355,8 @@ export function SceneReviewPanel({ sid, sequence: initialSequence, onConfirmed, 
                     }));
                   }}
                 />
-              ))}
+              );
+              })}
             </div>
           )}
 

@@ -27,6 +27,8 @@ projects/
 frontend/public/output.*
 frontend/public/sequence.json
 godot/director_sequence.json
+godot/assets/custom/*
+!godot/assets/custom/.gitkeep
 
 # OS
 .DS_Store

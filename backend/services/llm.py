@@ -364,53 +364,46 @@ def llm_call(system: str, user: str, tool: dict, token_cb=None, thinking_cb=None
                 content_buf = ""
                 for chunk in stream:
                     delta = chunk.choices[0].delta if chunk.choices else None
-                    if delta and delta.content:
+                    if not delta:
+                        continue
+                    
+                    # Support for DeepSeek Reasoner's reasoning_content
+                    reasoning = getattr(delta, 'reasoning_content', None)
+                    if reasoning:
+                        if thinking_cb:
+                            try: thinking_cb(reasoning)
+                            except Exception: pass
+                    
+                    if delta.content:
                         text = delta.content
                         args_str += text
-                        # Detect <thinking> and </thinking> tags for reasoning models
+                        # Detect <thinking> and </thinking> tags for some providers
                         if "<thinking>" in text:
                             in_thinking = True
-                            # Send any accumulated content before <thinking>
                             before = text.split("<thinking>")[0]
                             if before and token_cb:
-                                try:
-                                    token_cb(before)
-                                except Exception:
-                                    pass
-                            thinking_buf = text.split("<thinking>", 1)[1]
+                                try: token_cb(before)
+                                except Exception: pass
                             continue
                         if "</thinking>" in text:
                             in_thinking = False
                             parts = text.split("</thinking>", 1)
-                            thinking_buf += parts[0]
-                            # Send accumulated thinking
-                            if thinking_cb and thinking_buf:
-                                try:
-                                    thinking_cb(thinking_buf)
-                                except Exception:
-                                    pass
-                            thinking_buf = ""
-                            # Send content after </thinking>
+                            if parts[0] and thinking_cb:
+                                try: thinking_cb(parts[0])
+                                except Exception: pass
                             if len(parts) > 1 and parts[1] and token_cb:
-                                try:
-                                    token_cb(parts[1])
-                                except Exception:
-                                    pass
+                                try: token_cb(parts[1])
+                                except Exception: pass
                             continue
+                        
                         if in_thinking:
-                            thinking_buf += text
-                            # Stream thinking in real-time too
                             if thinking_cb:
-                                try:
-                                    thinking_cb(text)
-                                except Exception:
-                                    pass
+                                try: thinking_cb(text)
+                                except Exception: pass
                         else:
                             if token_cb:
-                                try:
-                                    token_cb(text)
-                                except Exception:
-                                    pass
+                                try: token_cb(text)
+                                except Exception: pass
 
             try:
                 parsed = _extract_json(args_str)

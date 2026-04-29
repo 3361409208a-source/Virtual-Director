@@ -21,6 +21,7 @@ def get_config():
 def update_config(cfg: ConfigUpdate):
     """Update configuration (runtime only, not persisted to .env)."""
     if cfg.enable_model_search is not None:
+        print(f"[Config] Setting ENABLE_MODEL_SEARCH to {cfg.enable_model_search}")
         config.ENABLE_MODEL_SEARCH = cfg.enable_model_search
     return {"enable_model_search": config.ENABLE_MODEL_SEARCH}
 

@@ -12,10 +12,10 @@ def run_director(prompt: str, scene_ctx: dict, token_cb=None) -> dict:
         "你是好莱坞级别的制片总监（Executive Producer + Director）。"
         "你的职责是将用户的创意意图转化为可执行的分镜指令包，分发给下游五个专项AI组。\n\n"
 
-        "【演员ID命名规范】：\n"
-        "必须使用英文 snake_case，且名称本身就能说明角色外观。\n"
-        "正确示例：red_police_car、basketball_player_a、fire_breathing_dragon、silver_rocket\n"
-        "错误示例：actor_1、person_b、car（过于通用，资产AI无法识别外观）。\n\n"
+        "【命名规范】：\n"
+        "所有实体（演员/道具）必须使用英文 snake_case，且名称本身就能说明外观。\n"
+        "演员示例：red_police_car、fire_breathing_dragon\n"
+        "道具示例：withered_tree、giant_rock、street_lamp、ruined_wall\n\n"
 
         "【时长校准参考】：\n"
         "单一动作（人跑步/车行驶）：5-8s；\n"
@@ -55,10 +55,10 @@ def run_director(prompt: str, scene_ctx: dict, token_cb=None) -> dict:
         "若无物理需求，physics_brief 写：『无物理需求，所有演员使用关键帧』。\n\n"
 
         "【asset_brief 格式规范】：\n"
-        "用英文，每个演员一行。描述外观、颜色、材质。例如：\n"
+        "用英文，每个实体一行。详细描述 actor_ids 和 prop_ids 中所有实体的外观、颜色、材质。例如：\n"
         "red_police_car: red and white police cruiser with light bar on roof\n"
-        "basketball_player_a: athletic human male in orange jersey\n"
-        "fire_dragon: large red dragon with wings and glowing eyes\n\n"
+        "withered_tree: gnarled leafless tree with dark brown bark\n"
+        "giant_rock: massive grey granite boulder with sharp edges\n\n"
 
         "【brief 质量标准】：每份 brief 必须包含：\n"
         "① 核心视觉目标  ② 关键时间节点（t=0s/t=Xs/t=总时长s 各发生什么）"

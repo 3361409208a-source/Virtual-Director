@@ -81,16 +81,16 @@ def _sphere_mesh(rx: float, ry: float, rz: float, rings: int = 12, segs: int = 1
     return verts, indices
 
 
-def _cone_mesh(rx: float, ry: float, rz: float, segs: int = 16):
-    """Cone along Y axis, base radius=(rx+rz)/2, height=ry, tip at top."""
-    r = (rx + rz) / 2
-    h = ry / 2
+def _cone_mesh(sx: float, sy: float, sz: float, segs: int = 16):
+    """Cone along Y axis, bounding box [sx, sy, sz], tip at top."""
+    rx, rz = sx / 2, sz / 2
+    h = sy / 2
     verts = []
     idx = []
     # Base ring + center
     for i in range(segs):
         a = 2 * math.pi * i / segs
-        verts.append([r * math.cos(a), -h, r * math.sin(a)])
+        verts.append([rx * math.cos(a), -h, rz * math.sin(a)])
     base_center = len(verts)
     verts.append([0, -h, 0])
     # Tip
@@ -109,11 +109,11 @@ def _cone_mesh(rx: float, ry: float, rz: float, segs: int = 16):
     return verts, indices
 
 
-def _capsule_mesh(rx: float, ry: float, rz: float, rings: int = 8, segs: int = 16):
-    """Capsule along Y axis: cylinder body + hemisphere caps. radius=(rx+rz)/2, total height=ry."""
-    r = (rx + rz) / 2
-    h = ry / 2  # total half-height
-    cap_h = min(r, h)  # cap height cannot exceed half of total
+def _capsule_mesh(sx: float, sy: float, sz: float, rings: int = 8, segs: int = 16):
+    """Capsule along Y axis: cylinder body + hemisphere caps. bounding box [sx, sy, sz]."""
+    rx, rz = sx / 2, sz / 2
+    h = sy / 2  # total half-height
+    cap_h = min(min(rx, rz), h)  # cap height
     body_h = h - cap_h  # cylinder body half-height
     verts = []
     idx = []
@@ -123,9 +123,9 @@ def _capsule_mesh(rx: float, ry: float, rz: float, rings: int = 8, segs: int = 1
         for j in range(segs):
             theta = 2 * math.pi * j / segs
             verts.append([
-                r * math.sin(phi) * math.cos(theta),
-                -(body_h + r * math.cos(phi)),
-                r * math.sin(phi) * math.sin(theta),
+                rx * math.sin(phi) * math.cos(theta),
+                -(body_h + cap_h * math.cos(phi)),
+                rz * math.sin(phi) * math.sin(theta),
             ])
     # Top hemisphere
     for i in range(rings + 1):
@@ -133,9 +133,9 @@ def _capsule_mesh(rx: float, ry: float, rz: float, rings: int = 8, segs: int = 1
         for j in range(segs):
             theta = 2 * math.pi * j / segs
             verts.append([
-                r * math.sin(phi) * math.cos(theta),
-                body_h + r * math.cos(phi),
-                r * math.sin(phi) * math.sin(theta),
+                rx * math.sin(phi) * math.cos(theta),
+                body_h + cap_h * math.cos(phi),
+                rz * math.sin(phi) * math.sin(theta),
             ])
     verts = np.array(verts, dtype=np.float32)
     # Bottom hemisphere indices
@@ -170,14 +170,14 @@ def _capsule_mesh(rx: float, ry: float, rz: float, rings: int = 8, segs: int = 1
     return verts, indices
 
 
-def _cylinder_mesh(rx: float, ry: float, rz: float, segs: int = 16):
-    """Capped cylinder along Y axis, radius=(rx+rz)/2, half-height=ry/2."""
-    r = (rx + rz) / 2
-    h = ry / 2
+def _cylinder_mesh(sx: float, sy: float, sz: float, segs: int = 16):
+    """Capped cylinder along Y axis, bounding box [sx, sy, sz]."""
+    rx, rz = sx / 2, sz / 2
+    h = sy / 2
     top_verts, bot_verts, side_top, side_bot = [], [], [], []
     for i in range(segs):
         a = 2 * math.pi * i / segs
-        x, z = r * math.cos(a), r * math.sin(a)
+        x, z = rx * math.cos(a), rz * math.sin(a)
         side_top.append([x,  h, z])
         side_bot.append([x, -h, z])
         top_verts.append([x,  h, z])
@@ -410,6 +410,7 @@ def build_glb(parts: list[dict]) -> bytes:
     gltf.asset = pygltflib.Asset(version="2.0", generator="VirtualDirector-GLBBuilder")
 
     all_bin = bytearray()
+    print(f"[GLBBuilder] Building GLB with {len(parts)} parts")
 
     def _add_accessor_f32(data: np.ndarray, atype: str) -> int:
         nonlocal all_bin
@@ -533,6 +534,8 @@ def build_glb(parts: list[dict]) -> bytes:
                 pos = {"x": 0, "y": 0, "z": 0}
                 rot = {"x": 0, "y": 0, "z": 0}
             except Exception as e:
+                import traceback
+                traceback.print_exc()
                 print(f"[GLBBuilder] CSG failed for {name}: {e}, falling back to base shape")
                 if shape == "sphere":
                     verts, indices = _sphere_mesh(sx/2, sy/2, sz/2)
@@ -560,6 +563,8 @@ def build_glb(parts: list[dict]) -> bytes:
         elif shape == "capsule":
             verts, indices = _capsule_mesh(sx, sy, sz)
         else:
+            if shape != "box":
+                print(f"[GLBBuilder] Unknown shape '{shape}', defaulting to box")
             verts, indices = _box_mesh(sx, sy, sz)
 
         pos_acc = _add_accessor_f32(verts, pygltflib.VEC3)

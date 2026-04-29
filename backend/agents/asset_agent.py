@@ -1,7 +1,10 @@
 import os
 from backend.services.llm import llm_call
-from backend.tools.definitions import asset_search_tool, asset_tool
-from backend.config import GODOT_DIR, ENABLE_MODEL_SEARCH
+from backend.tools.definitions import asset_search_tool
+import backend.config as _cfg   # 运行时读取，避免模块加载时静态拷贝
+from backend.config import GODOT_DIR
+from backend.services.asset_generator import generate_single_asset
+import asyncio
 
 def run_asset_agent(prompt: str, director: dict, progress_cb=None, token_cb=None) -> dict:
     """
@@ -16,18 +19,22 @@ def run_asset_agent(prompt: str, director: dict, progress_cb=None, token_cb=None
             except Exception:
                 pass
 
-    actors = director.get("actor_ids", [])
-    brief  = director.get("asset_brief", "")
+    actor_ids = director.get("actor_ids", [])
+    prop_ids  = director.get("prop_ids", [])
+    entities  = list(set(actor_ids + prop_ids))
+    
+    brief     = director.get("asset_brief", "")
     manifest_dict: dict = {}
 
     # ── Phase 1: LLM decides search queries ───────────────────────────────────
     fetched: set = set()
-    if ENABLE_MODEL_SEARCH:
+    print(f"[AssetAgent] ENABLE_MODEL_SEARCH: {_cfg.ENABLE_MODEL_SEARCH}")
+    if _cfg.ENABLE_MODEL_SEARCH:
         _cb("🔍 [资产AI] 分析演员特征，准备检索开源模型库...")
         search_system = (
             "You are a 3D asset search specialist. Respond in JSON only.\n"
             f"Scene brief: {brief}\n"
-            f"Actor IDs: {actors}\n\n"
+            f"Entity IDs: {entities}\n\n"
 
             "For EACH actor, provide the best English search query (1-3 words) to find a CC0 GLB model "
             "on Poly Pizza or Sketchfab, plus the target bounding-box size in meters.\n\n"
@@ -63,7 +70,7 @@ def run_asset_agent(prompt: str, director: dict, progress_cb=None, token_cb=None
             searches = search_plan.get("searches", [])
         except Exception as e:
             print(f"[AssetAgent] search plan LLM failed: {e}")
-            searches = [{"actor_id": a, "query": a.replace("_", " "), "target_size": {"x": 1, "y": 1, "z": 1}} for a in actors]
+            searches = [{"actor_id": a, "query": a.replace("_", " "), "target_size": {"x": 1, "y": 1, "z": 1}} for a in entities]
 
         # ── Phase 1b: Fetch from open-source sites ────────────────────────────────
         from backend.services.asset_fetcher import fetch_model
@@ -91,44 +98,38 @@ def run_asset_agent(prompt: str, director: dict, progress_cb=None, token_cb=None
     else:
         _cb("🧱 [资产AI] 检索已禁用，将全部由 AI 拼装建模")
 
-    # ── Phase 2: Composite fallback for un-fetched actors ─────────────────────
-    remaining = [a for a in actors if a not in fetched]
+    # ── Phase 2: High-Quality AI Modeling for un-fetched entities ───────────────
+    remaining = [a for a in entities if a not in fetched]
     if remaining:
-        _cb(f"🧱 [资产AI] {remaining} 使用积木拼装...")
-        system = (
-            "You are a senior 3D Asset TD, expert at maximizing visual fidelity with primitives.\n"
-            "Available shapes: box, sphere, cylinder, cone, capsule.\n"
-            "Available material props: color(RGBA), metallic(0-1), roughness(0-1), emissive(glow).\n"
-            "Respond in Chinese.\n\n"
-            f"Asset brief: {brief}\n"
-            f"Actor IDs to design (composite only): {remaining}\n\n"
-            "Before outputting tool call, analyze in Chinese:\n"
-            "1. Visual features: list all identifiable features of each actor, ranked by importance.\n"
-            "2. Approximation strategy: for each feature, how to best approximate with primitives.\n"
-            "   - Identity features (missing = unrecognizable) -> more parts + precise color + material.\n"
-            "   - Suggestive features -> 1-2 parts + precise color to hint.\n"
-            "   - Unrepresentable -> skip, budget to identity features.\n"
-            "3. Part budget: 12-25 parts per actor, identity 60%, suggestive 30%, base 10%.\n\n"
-            "Shape guide: sphere=heads/balls; cylinder=wheels/barrels/limbs; box=body/chassis/panels; cone=hats/tips/skirts; capsule=torso/limbs/rounded.\n"
-            "Use parent_name for joint hierarchy. Overlay thin boxes for patterns/decals.\n"
-            "Proportion: human torso {x:0.5,y:0.9,z:0.3} | car chassis {x:1.8,y:0.5,z:4.2}.\n"
-            "Colors: skin(0.9,0.75,0.6) | metal(0.7,0.72,0.75) | dark_blue(0.08,0.1,0.35) | gold(0.85,0.7,0.2) | black(0.1,0.1,0.1).\n"
-            "Materials: cloth=metallic:0,roughness:0.9 | armor=metallic:0.8,roughness:0.3 | skin=metallic:0,roughness:0.7\n"
-            "Coordinate: Y=up, Z=forward, X=right."
-        )
+        _cb(f"🎨 [建模AI] 发现 {len(remaining)} 个实体(角色/道具)缺少模型，启动深度建模引擎...")
+        
+        # We need an event loop to run the async generator
         try:
-            result = llm_call(system, prompt, asset_tool)
-            for item in result.get("asset_manifest", []):
-                aid = item.get("actor_id")
-                if aid and aid not in manifest_dict:
-                    manifest_dict[aid] = item
-        except Exception as e:
-            print(f"[AssetAgent] composite fallback failed: {e}")
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
 
-    # Fill any still-missing actors
-    for a in actors:
-        if a not in manifest_dict:
-            manifest_dict[a] = None
+        async def run_modeling():
+            tasks = []
+            for aid in remaining:
+                # Build a descriptive prompt for the generator
+                actor_desc = aid.replace("_", " ")
+                modeling_prompt = f"场景背景: {brief}\n角色ID: {aid}\n请设计并建模一个符合场景氛围的: {actor_desc}"
+                tasks.append(generate_single_asset(aid, modeling_prompt, progress_cb=_cb))
+            
+            results = await asyncio.gather(*tasks)
+            for aid, path in zip(remaining, results):
+                if path:
+                    manifest_dict[aid] = {
+                        "actor_id": aid,
+                        "type":     "downloaded", # Treat as downloaded asset (GLB)
+                        "path":     path,
+                    }
+                else:
+                    manifest_dict[aid] = None
 
-    print(f"[AssetAgent] 完成: {len(fetched)} 下载 + {len(remaining)} 积木")
+    loop.run_until_complete(run_modeling())
+
+    print(f"[AssetAgent] 完成: {len(fetched)} 下载 + {len(remaining)} 建模")
     return {"asset_manifest": manifest_dict}
