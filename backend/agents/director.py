@@ -38,11 +38,11 @@ def run_director(prompt: str, scene_ctx: dict, token_cb=None) -> dict:
         "所有主要位移沿 Z 轴，严禁让角色沿 X 轴飞行或行驶。\n\n"
 
         "【位移规模强制标准】：\n"
-        "步行/跑步：Z 位移 ≥ 20m；\n"
-        "驾车/跑道：Z 位移 ≥ 80m；\n"
-        "飞行/太空：Z 位移 ≥ 200m，同时 Y 轴从起始高度爬升。\n"
-        "位移不足导致画面静止是最严重的质量缺陷。\n"
-        "ground.size ≥ 演员最大Z位移 × 2。\n\n"
+        "所有场景必须根据主体尺寸进行缩放适配！严禁让模型在巨大场景中显得微小。\n"
+        "步行/跑步：Z 位移 10-20m；ground.size=40m；相机跟拍距离 3-5m。\n"
+        "驾车/跑道：Z 位移 40-80m；ground.size=120m；相机跟拍距离 10-15m。\n"
+        "飞行/太空：Z 位移 100-200m；相机跟拍距离 20-30m。\n"
+        "ground.size 必须且仅需略大于演员最大位移，严禁使用 500m+ 的坐标系处理近景内容。\n\n"
 
         "【多演员协调规则】：\n"
         "若有 2+ 演员，须在 actors_brief 中说明相对位置关系（如 car_a 在 car_b 左侧 5m 并行）；\n"
@@ -60,6 +60,11 @@ def run_director(prompt: str, scene_ctx: dict, token_cb=None) -> dict:
         "withered_tree: gnarled leafless tree with dark brown bark\n"
         "giant_rock: massive grey granite boulder with sharp edges\n\n"
 
+        "【实体隔离与资产规范】：\n"
+        "严禁将具有独立运动轨迹的实体合并为一个资产！\n"
+        "例如：发射架(tower)、底座(pad)和火箭(rocket)必须是三个独立的资产ID。\n"
+        "如果合并会导致动画异常（如发射火箭时连带底座一起升空）。\n"
+        "每个 actor_id/prop_id 必须对应唯一的物理模型描述。\n\n"
         "【brief 质量标准】：每份 brief 必须包含：\n"
         "① 核心视觉目标  ② 关键时间节点（t=0s/t=Xs/t=总时长s 各发生什么）"
         "③ 具体起终点坐标（如 从 z=0 加速到 z=-120）。\n\n"

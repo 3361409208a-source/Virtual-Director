@@ -1,5 +1,5 @@
 
-export type ModelSelection = 'deepseek-chat' | 'deepseek-reasoner' | 'deepseek-v4-flash' | 'deepseek-v4-pro' | 'GLM-4.7-Flash' | 'astron-code-latest';
+export type ModelSelection = 'deepseek-chat' | 'deepseek-reasoner' | 'deepseek-v4-flash' | 'deepseek-v4-pro' | 'GLM-4.7-Flash' | 'Kimi-K2.6' | 'astron-code-latest';
 export type RendererSelection = 'godot' | 'blender';
 
 interface Settings {
@@ -47,7 +47,9 @@ class SettingsStore {
 
   subscribe(listener: () => void) {
     this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
   }
 
   private notify() {

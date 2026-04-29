@@ -4,15 +4,7 @@ import { listModels, uploadModel, deleteCustomModel } from '../services/api';
 import { ThreeModelPreview } from './ThreeModelPreview';
 import { modelingStore } from '../services/modelingStore';
 
-// ── Icons ──────────────────────────────────────────────────────────────────
-const IconSparkles = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>;
-const IconBox = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>;
-const IconTrash = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>;
-const IconChevronDown = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>;
-const IconChevronUp = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m18 15-6-6-6 6"/></svg>;
-const IconPlus = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>;
-const IconUpload = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>;
-const IconTerminal = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg>;
+import { IconSparkles, IconBox, IconTrash, IconChevronDown, IconChevronUp, IconPlus, IconUpload, IconTerminal, IconClose, IconError, IconEye } from './Icons';
 
 const CAT_LABEL: Record<string, string> = {
   builtin:    '内置',
@@ -38,8 +30,13 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
   const [error, setError]         = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
   const [libPage, setLibPage]     = useState(0);
+  const [pageSize, setPageSize]   = useState(12);
   const [showTemp, setShowTemp]   = useState(false);
-  const LIB_PAGE_SIZE = 6;
+  const [previewPreset] = useState<any>('studio');
+  
+  // Resizable split state
+  const [splitWidth, setSplitWidth] = useState(window.innerWidth * 0.65); // Default ~70% for right panel
+  const isResizing = useRef(false);
 
   // AI modeling state from global store
   const [mState, setMState] = useState(modelingStore.getState());
@@ -52,6 +49,7 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
     return modelingStore.subscribe(setMState);
   }, []);
 
+  const [refining, setRefining] = useState(false);
   const { isGenerating: aiGenerating, logs: aiLog, result: aiResult, error: aiError, prompt: aiPrompt, llm: aiLlm, tokens: aiTokens } = mState;
   const setAiPrompt = (p: string) => modelingStore.setPrompt(p);
   const setAiLlm = (l: string) => modelingStore.setLlm(l);
@@ -60,12 +58,17 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
   useEffect(() => {
     if (aiGenerating) {
       setLogCollapsed(false);
-    } else if (aiResult) {
-      // Auto collapse after a short delay once success to show the final model better
-      const timer = setTimeout(() => setLogCollapsed(true), 500);
-      return () => clearTimeout(timer);
+      setRefining(false);
+    } else if (mState.parts.length > 0) {
+      // Trigger refining when generation finishes
+      setRefining(true);
+      const timerRefining = setTimeout(() => {
+        setRefining(false);
+        setLogCollapsed(true);
+      }, 3000);
+      return () => clearTimeout(timerRefining);
     }
-  }, [aiGenerating, aiResult]);
+  }, [aiGenerating, mState.parts.length]);
 
   // Base model modal
   const [showBaseModal, setShowBaseModal] = useState(false);
@@ -127,6 +130,36 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
     await load();
   };
 
+  // Resize handler
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing.current) return;
+      const container = document.querySelector('.model-lib-body');
+      if (!container) return;
+      const containerRect = container.getBoundingClientRect();
+      const newWidth = containerRect.right - e.clientX;
+      if (newWidth > 200 && newWidth < containerRect.width - 200) {
+        setSplitWidth(newWidth);
+      }
+    };
+    const handleMouseUp = () => {
+      isResizing.current = false;
+      document.body.style.cursor = '';
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    const startResizing = (_e: React.MouseEvent) => {
+      isResizing.current = true;
+      document.body.style.cursor = 'col-resize';
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    };
+    
+    // @ts-ignore
+    window.startResizing = startResizing;
+  }, []);
+
   const filteredModels = models.filter(m => {
     const isCatMatch = filter === 'all' || m.category === filter;
     if (!isCatMatch) return false;
@@ -134,7 +167,7 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
     if (!showTemp && m.category === 'custom' && m.filename.startsWith('ai_')) return false;
     return true;
   });
-  const pagedModels = filteredModels.slice(libPage * LIB_PAGE_SIZE, (libPage + 1) * LIB_PAGE_SIZE);
+  const pagedModels = filteredModels.slice(libPage * pageSize, (libPage + 1) * pageSize);
 
   const renderContent = () => (
     <>
@@ -151,7 +184,7 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
               </button>
             </div>
           )}
-          {!isStandalone && <button className="model-lib-close" onClick={() => setOpen(false)}>✕</button>}
+          {!isStandalone && <button className="model-lib-close" onClick={() => setOpen(false)}><IconClose /></button>}
         </div>
       </div>
 
@@ -168,10 +201,16 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
                     </span>
                   </button>
                 ))}
+                <div className="lib-page-size-selector">
+                  <span>每页:</span>
+                  {[12, 24, 48].map(size => (
+                    <button key={size} className={`page-size-btn ${pageSize === size ? 'active' : ''}`} onClick={() => { setPageSize(size); setLibPage(0); }}>{size}</button>
+                  ))}
+                </div>
                 <button 
                   className={`model-tab ${showTemp ? 'active' : ''}`} 
                   onClick={() => { setShowTemp(!showTemp); setLibPage(0); }}
-                  style={{ marginLeft: 'auto', fontSize: 10, opacity: 0.7 }}
+                  style={{ marginLeft: 8, fontSize: 10, opacity: 0.7 }}
                 >
                   {showTemp ? '显示全部' : '精简视图'}
                 </button>
@@ -179,7 +218,7 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
 
               <div className="model-grid">
                 {loading && <div className="model-lib-loading">加载中...</div>}
-                {error && <div className="model-lib-error">❌ {error}</div>}
+                {error && <div className="model-lib-error"><IconError /> {error}</div>}
                 {pagedModels.map(m => (
                   <div key={m.id} className={`model-card ${preview?.id === m.id ? 'selected' : ''}`} onClick={() => setPreview(m)}>
                     <div className="model-card-viewer">
@@ -196,23 +235,28 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
                 {pagedModels.length === 0 && !loading && <div className="model-empty">暂无模型</div>}
               </div>
 
-              {filteredModels.length > LIB_PAGE_SIZE && (
+              {filteredModels.length > pageSize && (
                 <div className="lib-pager">
                   <button className="ai-pager-btn" onClick={() => setLibPage(p => Math.max(0, p - 1))} disabled={libPage === 0}>‹</button>
                   <span className="ai-pager-info">
-                    {libPage * LIB_PAGE_SIZE + 1}–{Math.min((libPage + 1) * LIB_PAGE_SIZE, filteredModels.length)} / {filteredModels.length}
+                    {libPage * pageSize + 1}–{Math.min((libPage + 1) * pageSize, filteredModels.length)} / {filteredModels.length}
                   </span>
-                  <button className="ai-pager-btn" onClick={() => setLibPage(p => p + 1)} disabled={(libPage + 1) * LIB_PAGE_SIZE >= filteredModels.length}>›</button>
+                  <button className="ai-pager-btn" onClick={() => setLibPage(p => p + 1)} disabled={(libPage + 1) * pageSize >= filteredModels.length}>›</button>
                 </div>
               )}
             </div>
 
-            <div className="model-preview-panel">
+            <div className="lib-resize-handle" onMouseDown={(e) => (window as any).startResizing(e)} />
+
+            <div className="model-preview-panel" style={{ width: splitWidth }}>
               {preview ? (
                 <>
                   <div className="model-preview-viewer">
-                    {/* @ts-ignore */}
-                    <model-viewer src={`http://localhost:8000${preview.url}`} auto-rotate camera-controls shadow-intensity="1" exposure="1" style={{ width: '100%', height: '100%' }} />
+                    <ThreeModelPreview 
+                      url={preview.url} 
+                      parts={[]}
+                      preset={previewPreset}
+                    />
                   </div>
                   <div className="model-preview-info">
                     <div className="model-preview-name">{preview.name}</div>
@@ -225,7 +269,7 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
                 </>
               ) : (
                 <div className="ai-placeholder">
-                  <div className="ai-placeholder-icon">👁️</div>
+                <div className="ai-placeholder-icon"><IconEye /></div>
                   <div>选择模型进行预览</div>
                 </div>
               )}
@@ -262,6 +306,7 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
                   { id: 'deepseek-v4-pro',    label: 'DeepSeek V4 Pro',desc: '最强性能' },
                   { id: 'deepseek-v4-flash',  label: 'V4 Flash',       desc: '极速生成' },
                   { id: 'GLM-4.7-Flash',      label: 'GLM 4.7 Flash',  desc: '极速' },
+                  { id: 'Kimi-K2.6',           label: 'Kimi K2.6',      desc: '方舟 · Kimi' },
                   { id: 'astron-code-latest', label: 'Astron Code',    desc: '代码专家' },
                 ].map(m => (
                   <button key={m.id} className={`ai-llm-btn ${aiLlm === m.id ? 'active' : ''}`} onClick={() => setAiLlm(m.id)}>
@@ -282,16 +327,17 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
               <button className="ai-generate-btn" onClick={handleAiGenerate} disabled={aiGenerating || !aiPrompt.trim()}>
                 {aiGenerating ? <><span className="ai-spinner" /> AI 建模中…</> : <><IconSparkles /> 启动深度建模引擎</>}
               </button>
-              {aiError && <div className="ai-model-error">❌ {aiError}</div>}
+              {aiError && <div className="ai-model-error"><IconError /> {aiError}</div>}
             </div>
 
             <div className="ai-model-right">
-              {(aiResult || mState.parts.length > 0) ? (
+              {(aiResult || mState.parts.length > 0 || aiGenerating || refining) ? (
                 <div className="ai-result">
                   <div className="ai-result-viewer">
                     <ThreeModelPreview 
-                      url={aiResult ? `${aiResult.url}?t=${Date.now()}` : null} 
+                      url={(aiResult && !refining) ? `${aiResult.url}?t=${Date.now()}` : null} 
                       parts={mState.parts}
+                      isRefining={refining}
                     />
                   </div>
                   {aiResult && (
@@ -310,56 +356,43 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
                       </div>
                     </div>
                   )}
-                  {aiGenerating && !aiResult && (
-                    <div className="ai-building-overlay">
-                      <span className="ai-spinner" /> 正在实时同步建模参数...
+                  {(aiGenerating || refining) && !aiResult && (
+                    <div className="ai-building-overlay" style={{ pointerEvents: 'none' }}>
+                      <div className="ai-building-text">
+                        <span className="ai-spinner" />
+                        {refining ? '正在深度精修 3D 实体...' : 'AI 正在构建 3D 实体...'}
+                      </div>
                     </div>
                   )}
                 </div>
               ) : (
                 <div className="ai-placeholder">
-                  {aiGenerating ? (
-                    <div className="ai-building-wrapper">
-                      <div className="ai-building-grid" />
-                      <div className="ai-building-scanner" />
-                      <div className="ai-building-text">
-                        <span className="ai-spinner" />
-                        AI 正在构建 3D 实体...
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="ai-placeholder-icon"><IconSparkles /></div>
-                      <div>预览区域</div>
-                      <div style={{ fontSize: 11, color: '#6e7681', marginTop: 4 }}>生成后将在此处展示 3D 预览</div>
-                    </>
-                  )}
-                </div>
+                  <div className="ai-placeholder-icon"><IconBox /></div>
+                  <div>描述你的需求并点击生成</div>
+                  </div>
               )}
 
-              {(aiLog.length > 0 || aiGenerating) && (
-                <div className={`ai-log-panel ${logCollapsed ? 'collapsed' : ''}`}>
-                  <div className="ai-log-title" onClick={() => setLogCollapsed(!logCollapsed)}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <IconTerminal /> 
-                      推理日志
-                      <span style={{ fontSize: 10, color: 'var(--text-secondary)', marginLeft: 8, fontWeight: 'normal' }}>
-                        Token: <b>{aiTokens && aiTokens.input > 0 ? aiTokens.input : Math.floor(aiPrompt.length * 1.5)}</b> in / 
-                        <b>{aiTokens && aiTokens.output > 0 ? aiTokens.output : Math.floor(aiLog.join('').length / 2)}</b> out
-                      </span>
-                    </div>
-                    <button className="log-collapse-btn" style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer' }}>
-                      {logCollapsed ? <IconChevronUp /> : <IconChevronDown />}
-                    </button>
+              <div className={`ai-log-panel ${logCollapsed ? 'collapsed' : ''}`}>
+                <div className="ai-log-title" onClick={() => setLogCollapsed(!logCollapsed)}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <IconTerminal /> 
+                    推理日志
+                    <span style={{ fontSize: 10, color: 'var(--text-secondary)', marginLeft: 8, fontWeight: 'normal' }}>
+                      Token: <b>{aiTokens && aiTokens.input > 0 ? aiTokens.input : Math.floor(aiPrompt.length * 1.5)}</b> in / 
+                      <b>{aiTokens && aiTokens.output > 0 ? aiTokens.output : Math.floor(aiLog.join('').length / 2)}</b> out
+                    </span>
                   </div>
-                  <div className="ai-log-body">
-                    {aiLog.map((line, i) => (
-                      <div key={i} className={`ai-log-line ${line.startsWith('💭') ? 'thinking' : ''}`}>{line}</div>
-                    ))}
-                    <div ref={logEndRef} />
-                  </div>
+                  <button className="log-collapse-btn" style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer' }}>
+                    {logCollapsed ? <IconChevronUp /> : <IconChevronDown />}
+                  </button>
                 </div>
-              )}
+                <div className="ai-log-body">
+                  {aiLog.map((line, i) => (
+                    <div key={i} className={`ai-log-line ${line.startsWith('💭') ? 'thinking' : ''}`}>{line}</div>
+                  ))}
+                  <div ref={logEndRef} />
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -370,7 +403,7 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
           <div className="base-model-modal" onClick={e => e.stopPropagation()}>
             <div className="base-model-modal-header">
               <h3>选择参考底模</h3>
-              <button className="model-lib-close" onClick={() => setShowBaseModal(false)}>✕</button>
+              <button className="model-lib-close" onClick={() => setShowBaseModal(false)}><IconClose /></button>
             </div>
             <div className="base-model-modal-body">
                <div className="base-model-modal-left" style={{ flex: 1, overflowY: 'auto', padding: 12 }}>

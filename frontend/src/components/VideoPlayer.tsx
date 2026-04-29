@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { IconClapper } from './Icons';
 
 interface Props {
   videoUrl: string | null;
@@ -64,7 +65,7 @@ export function VideoPlayer({ videoUrl, isRendering, streamLog = [] }: Props) {
           </div>
         ) : (
           <div className="placeholder-content">
-            <div className="placeholder-icon">🎬</div>
+            <div className="placeholder-icon"><IconClapper /></div>
             <p>等待导演下达指令</p>
           </div>
         )}

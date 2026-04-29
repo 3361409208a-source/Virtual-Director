@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { flushSync } from 'react-dom';
+import { useState, useEffect } from 'react';
 import type { Message, LogEntry, SceneSequence } from './types';
 import { streamGenerate, streamTestRender, projectVideoUrl } from './services/api';
 import { ChatPanel } from './components/ChatPanel';
@@ -9,7 +8,6 @@ import { ModelLibraryPanel } from './components/ModelLibraryPanel';
 import { SceneReviewPanel } from './components/SceneReviewPanel';
 import { SettingsPanel } from './components/SettingsPanel';
 import { settingsStore } from './services/settingsStore';
-import { useEffect } from 'react';
 
 const WELCOME: Message = {
   id: '0',
@@ -17,7 +15,7 @@ const WELCOME: Message = {
   text: '你好！我是练习时长两年半的个人 AI 导演助理。请告诉我你想要渲染什么画面？',
 };
 
-export type ModelSelection = 'deepseek-chat' | 'deepseek-reasoner' | 'deepseek-v4-flash' | 'deepseek-v4-pro' | 'GLM-4.7-Flash' | 'astron-code-latest';
+export type ModelSelection = 'deepseek-chat' | 'deepseek-reasoner' | 'deepseek-v4-flash' | 'deepseek-v4-pro' | 'GLM-4.7-Flash' | 'Kimi-K2.6' | 'astron-code-latest';
 export type RendererSelection = 'godot' | 'blender';
 export type ViewMode = 'director' | 'modeling' | 'library' | 'settings';
 

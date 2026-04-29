@@ -13,7 +13,7 @@ from backend.config import (
 AVAILABLE_MODELS = [
     "deepseek-chat", "deepseek-reasoner",
     "deepseek-v4-flash", "deepseek-v4-pro",
-    "GLM-4.7-Flash",
+    "GLM-4.7-Flash", "Kimi-K2.6",
     "astron-code-latest"
 ]
 
@@ -35,27 +35,22 @@ def _get_client_config(selection: str):
             max_retries=3
         ), selection
 
-    elif selection == "GLM-4.7-Flash":
+    elif selection in ["GLM-4.7-Flash", "Kimi-K2.6"]:
         return OpenAI(
             api_key=GLM_API_KEY,
             base_url=GLM_BASE_URL,
             timeout=120.0,
             max_retries=3
-        ), GLM_MODEL
+        ), GLM_MODEL if selection == "GLM-4.7-Flash" else selection
 
     elif selection == "astron-code-latest":
-        # Anthropic-compatible API — uses /v1/messages, not /chat/completions
-        base = ANTHROPIC_BASE_URL.rstrip("/")
-        # Strip trailing /v1 if present; the SDK adds its own path
-        if base.endswith("/v1"):
-            base = base[:-3]
-        client = _anthropic_mod.Anthropic(
+        # Astron / Aliyun Maas API (OpenAI-compatible)
+        return OpenAI(
             api_key=ANTHROPIC_API_KEY,
-            base_url=base,
+            base_url=ANTHROPIC_BASE_URL,
             timeout=120.0,
-            max_retries=3,
-        )
-        return client, "astron-code-latest"
+            max_retries=3
+        ), "astron-code-latest"
 
     return None, None
 
@@ -320,14 +315,23 @@ def llm_call(system: str, user: str, tool: dict, token_cb=None, thinking_cb=None
     # ── OpenAI-compatible path ──────────────────────────────────────────────
     # DeepSeek V4 API currently returns 400 errors for strict tool_choice on both flash and pro models.
     # We will use Prompt Engineering (JSON mode) for them.
-    supports_tools = selection not in ["deepseek-reasoner", "deepseek-v4-pro", "deepseek-v4-flash"]
+    supports_tools = selection not in ["deepseek-reasoner", "deepseek-v4-pro", "deepseek-v4-flash", "astron-code-latest", "Kimi-K2.6"]
 
     messages = [
         {"role": "system", "content": system},
         {"role": "user",   "content": user},
     ]
 
-    if not supports_tools:
+    if selection == "astron-code-latest":
+        # For Astron, we use JSON mode with a very strict instruction
+        schema_str = json.dumps(tool["function"].get("parameters", {}), ensure_ascii=False)
+        messages[0]["content"] += (
+            f"\n\n[CRITICAL: 3D MODELING PROTOCOL]\n"
+            f"You MUST output a detailed 3D model with at least 15-25 parts.\n"
+            f"You MUST output ONLY valid JSON matching this schema:\n{schema_str}\n"
+            f"Do NOT include explanations, markdown blocks, or any other text. Start directly with '{{'."
+        )
+    elif not supports_tools:
         schema_str = json.dumps(tool["function"].get("parameters", {}), ensure_ascii=False)
         messages[0]["content"] += (
             f"\n\n[CRITICAL INSTRUCTION]\n"
@@ -477,6 +481,44 @@ def llm_call(system: str, user: str, tool: dict, token_cb=None, thinking_cb=None
             continue
             
     raise last_error or RuntimeError("LLM call failed after retries")
+
+
+def _llm_call_openai(client, model, system, user, tool, token_cb, thinking_cb):
+    """Internal helper for OpenAI-compatible tool calls with streaming."""
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user",   "content": user},
+    ]
+    
+    resp = client.chat.completions.create(
+        model=model,
+        messages=messages,
+        tools=[tool],
+        tool_choice={"type": "function", "function": {"name": tool["function"]["name"]}},
+        stream=True,
+    )
+    
+    args_str = ""
+    for chunk in resp:
+        delta = chunk.choices[0].delta if chunk.choices else None
+        if not delta:
+            continue
+        if delta.tool_calls:
+            frag = delta.tool_calls[0].function.arguments or ""
+            if frag:
+                args_str += frag
+                if token_cb:
+                    try: token_cb(frag)
+                    except: pass
+        elif delta.content:
+            args_str += delta.content
+            if token_cb:
+                try: token_cb(delta.content)
+                except: pass
+    
+    if not args_str:
+        raise RuntimeError("LLM did not return a tool call or content.")
+    return args_str
 
 
 

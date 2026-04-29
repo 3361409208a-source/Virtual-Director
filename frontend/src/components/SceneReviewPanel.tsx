@@ -6,10 +6,8 @@ import { ThreeModelPreview } from './ThreeModelPreview';
 // ── Icons ──────────────────────────────────────────────────────────────────
 const IconSparkles = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>;
 const IconBox = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>;
-const IconTrash = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>;
 const IconChevronDown = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>;
 const IconChevronUp = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m18 15-6-6-6 6"/></svg>;
-const IconPlus = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>;
 const IconTerminal = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg>;
 const IconActor = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>;
 const IconTrack = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 18l5-5-5-5"/><path d="M6 18l5-5-5-5"/></svg>;
@@ -78,7 +76,7 @@ function EditableBlock({ label, icon, data, onChange }: BlockProps) {
 
   const save = () => {
     const result = tryParse(draft);
-    if (!result.ok) {
+    if ('error' in result) {
       setErr(`JSON 解析错误：${result.error}`);
       return;
     }
@@ -242,13 +240,12 @@ function AssetRegenerator({ actorId, currentAsset, model, onDone }: RegeneratorP
         )}
       </div>
 
-      {!isComposite && currentAsset?.path && (
+      {currentAsset && (
         <div className="asset-preview-container-large">
-          {getAssetUrl(currentAsset.path) && (
-            <ThreeModelPreview
-              url={getAssetUrl(currentAsset.path) + (currentAsset.path.includes('?') ? '&' : '?') + 't=' + Date.now()}
-            />
-          )}
+          <ThreeModelPreview
+            url={currentAsset.path ? getAssetUrl(currentAsset.path) + (currentAsset.path.includes('?') ? '&' : '?') + 't=' + Date.now() : null}
+            parts={currentAsset.parts || []}
+          />
         </div>
       )}
 
@@ -368,7 +365,7 @@ export function SceneReviewPanel({ sid, sequence: initialSequence, model, onConf
                 <IconSparkles /> 如果 AI 下载或拼装的模型不满意，可以在此处输入描述重新生成专属 GLB 模型。
               </div>
               {(seq.actors ?? []).map((actor, idx) => {
-                const aid: string = actor.actor_id ?? actor.id ?? `actor_${idx}`;
+                const aid: string = actor.actor_id ?? `actor_${idx}`;
                 return (
                 <AssetRegenerator
                   key={aid + '_' + idx}

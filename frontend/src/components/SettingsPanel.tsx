@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { settingsStore, type ModelSelection, type RendererSelection } from '../services/settingsStore';
+import { settingsStore, type ModelSelection } from '../services/settingsStore';
 
 const IconCpu = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9z"/><path d="M15 2v2"/><path d="M9 2v2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M15 20v2"/><path d="M9 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/></svg>;
 const IconZap = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>;
@@ -15,7 +15,7 @@ export const SettingsPanel: React.FC = () => {
   }, []);
 
   const models: ModelSelection[] = [
-    'deepseek-chat', 'deepseek-reasoner', 'deepseek-v4-flash', 'deepseek-v4-pro', 'GLM-4.7-Flash', 'astron-code-latest'
+    'deepseek-chat', 'deepseek-reasoner', 'deepseek-v4-flash', 'deepseek-v4-pro', 'GLM-4.7-Flash', 'Kimi-K2.6', 'astron-code-latest'
   ];
 
   return (

@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import type { ReactNode } from 'react';
+import { IconError, IconClapper, IconCheck, IconClock } from './Icons';
 import type { LogEntry } from '../types';
 
 interface Props {
@@ -14,11 +16,11 @@ const PHASES = [
   { label: '输出压制 · 母带生成',     match: (s: string) => ['converting','done'].includes(s) },
 ];
 
-function stepIcon(step: string, isLast: boolean): string {
-  if (step === 'error')              return '❌';
-  if (step === 'done')               return '🎥';
-  if (step.endsWith('_done'))        return '✅';
-  if (isLast)                        return '⏳';
+function stepIcon(step: string, isLast: boolean): ReactNode {
+  if (step === 'error')              return <IconError />;
+  if (step === 'done')               return <IconClapper />;
+  if (step.endsWith('_done'))        return <IconCheck />;
+  if (isLast)                        return <IconClock />;
   return '▸';
 }
 
@@ -35,7 +37,8 @@ export function WorkflowLog({ entries }: Props) {
   const [now, setNow] = useState(Date.now());
 
   const active = entries[entries.length - 1];
-  const isDone = !active || active.step === 'done' || active.step === 'error';
+  const isActuallyDone = !active || active.step === 'done' || active.step === 'error' || (active.step === 'actor_done' && entries.some(e => e.step === 'rendering_done'));
+  const isDone = isActuallyDone;
 
   // Tick every 200ms while still in progress
   useEffect(() => {
@@ -91,7 +94,8 @@ export function WorkflowLog({ entries }: Props) {
             const nextTs = entries[gIdx + 1]?.ts ?? lastTs;
 
             // Show timing: live counter on running row, static on completed rows
-            const showDoneTime = e.step.endsWith('_done') || e.step === 'done' || e.step === 'error';
+            const isStepFinished = e.step.endsWith('_done') || e.step === 'done' || e.step === 'error';
+            const showDoneTime = isStepFinished;
 
             return (
               <div key={ri} className={`wf-row${isRunning ? ' running' : ''}`}>

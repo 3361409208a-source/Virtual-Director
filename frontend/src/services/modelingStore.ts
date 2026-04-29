@@ -33,7 +33,9 @@ class ModelingStore {
 
   subscribe(l: Listener) {
     this.listeners.add(l);
-    return () => this.listeners.delete(l);
+    return () => {
+      this.listeners.delete(l);
+    };
   }
 
   private notify() {
@@ -85,20 +87,48 @@ class ModelingStore {
               this.state.logs.push('📝 ' + tokenBuf);
             }
             
-            // Real-time parts extraction from token buffer
+            // ── Robust real-time parts extraction ──
             try {
-              // Look for patterns like {"color":..., "name":..., "position":..., "shape":...}
-              // This is a naive but effective way to catch parts as they stream
-              const matches = tokenBuf.match(/\{"color":.+?\}\}/g);
-              if (matches) {
-                const parsed = matches.map(m => {
-                   try { return JSON.parse(m); } catch(e) { return null; }
-                }).filter(x => x && x.position);
-                if (parsed.length > this.state.parts.length) {
-                   this.state.parts = parsed;
+              const partsFound: any[] = [];
+              
+              // 1. 全文搜索所有可能的对象块 {}
+              let pos = 0;
+              while (true) {
+                const s = tokenBuf.indexOf('{', pos);
+                if (s === -1) break;
+                
+                let bc = 0;
+                let e = -1;
+                for (let i = s; i < tokenBuf.length; i++) {
+                  if (tokenBuf[i] === '{') bc++;
+                  else if (tokenBuf[i] === '}') {
+                    bc--;
+                    if (bc === 0) { e = i; break; }
+                  }
+                }
+
+                if (e !== -1) {
+                  const chunk = tokenBuf.slice(s, e + 1);
+                  try {
+                    // 只要包含 shape 关键字，就尝试解析
+                    if (chunk.includes('"shape"') || chunk.includes('shape:')) {
+                      const obj = JSON.parse(chunk);
+                      if (obj && (obj.shape || obj.type)) {
+                        partsFound.push(obj);
+                      }
+                    }
+                  } catch(ex) {}
+                  pos = e + 1;
+                } else break; // 还没写完的花括号
+              }
+
+              if (partsFound.length > 0) {
+                // 如果解析出的零件数有增加，则更新状态
+                if (partsFound.length !== this.state.parts.length) {
+                  this.state.parts = partsFound;
                 }
               }
-            } catch(e) {}
+            } catch(e) { }
 
           } else if (ev.step === 'done') {
             this.state.result = ev as unknown as AIGenerateResult;
@@ -108,7 +138,7 @@ class ModelingStore {
             this.state.error = ev.msg;
             this.state.logs.push('❌ ' + ev.msg);
           } else {
-            tokenBuf = '';
+            // 不再清空 tokenBuf，因为中间可能穿插着 building 等状态消息
             this.state.logs.push(ev.msg);
           }
           this.notify();

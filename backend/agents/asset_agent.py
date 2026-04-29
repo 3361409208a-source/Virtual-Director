@@ -116,7 +116,8 @@ def run_asset_agent(prompt: str, director: dict, progress_cb=None, token_cb=None
                 # Build a descriptive prompt for the generator
                 actor_desc = aid.replace("_", " ")
                 modeling_prompt = f"场景背景: {brief}\n角色ID: {aid}\n请设计并建模一个符合场景氛围的: {actor_desc}"
-                tasks.append(generate_single_asset(aid, modeling_prompt, progress_cb=_cb))
+                # Pass model_override if available, else let generator decide
+                tasks.append(generate_single_asset(aid, modeling_prompt, model=model_override or "deepseek-v4-flash", progress_cb=_cb))
             
             results = await asyncio.gather(*tasks)
             for aid, path in zip(remaining, results):

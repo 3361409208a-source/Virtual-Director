@@ -27,7 +27,7 @@ DEEPSEEK_API_KEY    = os.environ.get("DEEPSEEK_API_KEY", "")
 DEEPSEEK_BASE_URL   = "https://api.deepseek.com"
 DEEPSEEK_MODEL      = "deepseek-chat"
 
-GLM_API_KEY       = os.environ.get("GLM_API_KEY", "")
+GLM_API_KEY       = os.environ.get("GLM_API_KEY", "WPD9B3N5OCSJRYCHOUYD45X5KD3GP67J2GIAGN69")
 GLM_BASE_URL      = "https://ai.gitee.com/v1"
 GLM_MODEL         = "GLM-4.7-Flash"
 

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { IconClapper } from './Icons';
 import type { ProjectMeta, ProjectDetail } from '../types';
 import { listProjects, getProject, projectVideoUrl } from '../services/api';
 
@@ -110,7 +111,7 @@ export function ProjectPanel({ activeProjectId, onSelectProject }: Props) {
                   <div className="project-card-title">{p.prompt.slice(0, 40)}{p.prompt.length > 40 ? '…' : ''}</div>
                   <div className="project-card-meta">
                     <span>{formatDate(p.created_at)}</span>
-                    {p.has_video && <span className="video-tag">🎬</span>}
+                    {p.has_video && <span className="video-tag"><IconClapper /></span>}
                   </div>
                 </div>
               ))}
