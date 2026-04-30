@@ -1,19 +1,26 @@
-from backend.services.llm import llm_call, AVAILABLE_MODELS
+import json
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+from backend.services.llm import llm_call
 from backend.tools.definitions import actor_tool
 
 
-def run_actor_agent(prompt: str, director: dict, scene_ctx: dict, token_cb=None, model_override=None) -> dict:
-    """
-    Worker B: Define actors and generate per-actor keyframe animation tracks.
-    Must use the exact actor IDs provided by the director.
-    Returns a dict containing 'actors' and 'actor_tracks'.
-    """
-    system = (
+def _actor_system(director: dict, actor_ids: list[str] | None = None) -> str:
+    target_ids = actor_ids or director["actor_ids"]
+    scope = ""
+    if actor_ids is not None:
+        scope = (
+            f"【本次只生成这些演员】：{target_ids}\n"
+            f"【全片演员全集，用于相对位置/追逐/碰撞参考】：{director['actor_ids']}\n"
+            "输出中 actors 和 actor_tracks 只能包含本次指定演员，禁止生成其他演员。\n\n"
+        )
+    return (
         "你是好莱坞级别的动画总监（Animation Director）。\n\n"
 
         f"【任务简报】：{director['actors_brief']}\n"
-        f"【演员ID（必须原样使用）】：{director['actor_ids']}\n"
+        f"【演员ID（必须原样使用）】：{target_ids}\n"
         f"【片长】：{director['meta']['total_duration']}s。Y=0 为地面基准。\n\n"
+        f"{scope}"
 
         "【演员 type 选择指南】：\n"
         "humanoid → 所有人形角色（人、士兵、运动员、机器人）\n"
@@ -61,7 +68,90 @@ def run_actor_agent(prompt: str, director: dict, scene_ctx: dict, token_cb=None,
         "车轮滚动：sub_tracks.wheel_fl rotation.x 随 Z 位移线性递增（每米转动 ~57°）；\n"
         "仅在有 composite 类型资产时使用 sub_tracks，下载模型无效果。"
     )
-    # Use provided model_override or default to current model
+
+
+def _parse_json_field(v, fallback):
+    if isinstance(v, str):
+        try:
+            return json.loads(v)
+        except Exception:
+            return fallback
+    return v if v is not None else fallback
+
+
+def _actor_chunks(actor_ids: list[str], max_workers: int) -> list[list[str]]:
+    if len(actor_ids) <= 1:
+        return [actor_ids]
+    worker_count = min(max_workers, len(actor_ids))
+    return [actor_ids[i::worker_count] for i in range(worker_count) if actor_ids[i::worker_count]]
+
+
+def _merge_actor_results(results: list[dict], actor_ids: list[str]) -> dict:
+    actors = []
+    actor_tracks = {}
+    seen = set()
+    allowed = set(actor_ids)
+    for result in results:
+        for actor in _parse_json_field(result.get("actors", []), []):
+            actor_id = actor.get("id")
+            if actor_id in allowed and actor_id not in seen:
+                actors.append(actor)
+                seen.add(actor_id)
+        tracks = _parse_json_field(result.get("actor_tracks", {}), {})
+        if isinstance(tracks, dict):
+            for actor_id, keyframes in tracks.items():
+                if actor_id in allowed:
+                    actor_tracks[actor_id] = keyframes
+    missing = [actor_id for actor_id in actor_ids if actor_id not in seen or actor_id not in actor_tracks]
+    if missing:
+        raise RuntimeError(f"Missing actor animation output for: {missing}")
+    return {"actors": actors, "actor_tracks": actor_tracks}
+
+
+def _run_actor_agent_single(prompt: str, director: dict, token_cb=None, model_override=None, actor_ids: list[str] | None = None) -> dict:
+    system = _actor_system(director, actor_ids)
     return llm_call(system, prompt, actor_tool, token_cb=token_cb, model_override=model_override)
+
+
+def run_actor_agent(prompt: str, director: dict, scene_ctx: dict, token_cb=None, model_override=None) -> dict:
+    """
+    Worker B: Define actors and generate per-actor keyframe animation tracks.
+    Must use the exact actor IDs provided by the director.
+    Returns a dict containing 'actors' and 'actor_tracks'.
+    """
+    actor_ids = list(director.get("actor_ids") or [])
+    if len(actor_ids) <= 1:
+        return _run_actor_agent_single(prompt, director, token_cb=token_cb, model_override=model_override)
+
+    chunks = _actor_chunks(actor_ids, max_workers=4)
+    if token_cb:
+        try:
+            token_cb(f"\n🎭 [动画导演] 拆分为 {len(chunks)} 个动作小组并行规划...\n")
+        except Exception:
+            pass
+
+    try:
+        results = []
+        with ThreadPoolExecutor(max_workers=len(chunks)) as pool:
+            future_map = {
+                pool.submit(_run_actor_agent_single, prompt, director, None, model_override, chunk): chunk
+                for chunk in chunks
+            }
+            for future in as_completed(future_map):
+                chunk = future_map[future]
+                results.append(future.result())
+                if token_cb:
+                    try:
+                        token_cb(f"✅ 动作小组完成：{', '.join(chunk)}\n")
+                    except Exception:
+                        pass
+        return _merge_actor_results(results, actor_ids)
+    except Exception:
+        if token_cb:
+            try:
+                token_cb("⚠️ 并行动作规划回退为单组动画导演...\n")
+            except Exception:
+                pass
+        return _run_actor_agent_single(prompt, director, token_cb=token_cb, model_override=model_override)
 
 

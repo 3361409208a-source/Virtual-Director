@@ -51,9 +51,10 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
   }, []);
 
   const [refining, setRefining] = useState(false);
-  const { isGenerating: aiGenerating, logs: aiLog, result: aiResult, error: aiError, prompt: aiPrompt, llm: aiLlm, tokens: aiTokens } = mState;
+  const { isGenerating: aiGenerating, logs: aiLog, result: aiResult, error: aiError, prompt: aiPrompt, llm: aiLlm, engine: aiEngine, tokens: aiTokens } = mState;
   const setAiPrompt = (p: string) => modelingStore.setPrompt(p);
   const setAiLlm = (l: string) => modelingStore.setLlm(l);
+  const setAiEngine = (engine: string) => modelingStore.setEngine(engine);
 
   // Auto-collapse/expand log based on generation state
   useEffect(() => {
@@ -113,7 +114,7 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
 
   const handleAiGenerate = async () => {
     if (!aiPrompt.trim() || aiGenerating) return;
-    modelingStore.startGenerate(aiPrompt, aiLlm, aiBaseModel?.name);
+    modelingStore.startGenerate(aiPrompt, aiLlm, aiBaseModel?.name, aiEngine);
   };
 
   const handleOptimize = async () => {
@@ -326,6 +327,20 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
                   <button key={m.id} className={`ai-llm-btn ${aiLlm === m.id ? 'active' : ''}`} onClick={() => setAiLlm(m.id)}>
                     <span className="ai-llm-name">{m.label}</span>
                     <span className="ai-llm-desc">{m.desc}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="ai-section-label">②.5 选择建模引擎</div>
+              <div className="ai-llm-selector">
+                {[
+                  { id: 'procedural', label: '快速草模', desc: '程序化拼装 · 稳定兜底' },
+                  { id: 'open3d', label: '开源高精', desc: 'Hunyuan3D/本地服务' },
+                  { id: 'auto', label: '自动', desc: '优先高精 · 失败回退' },
+                ].map(engine => (
+                  <button key={engine.id} className={`ai-llm-btn ${aiEngine === engine.id ? 'active' : ''}`} onClick={() => setAiEngine(engine.id)}>
+                    <span className="ai-llm-name">{engine.label}</span>
+                    <span className="ai-llm-desc">{engine.desc}</span>
                   </button>
                 ))}
               </div>

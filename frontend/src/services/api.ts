@@ -90,11 +90,12 @@ export async function streamAiGenerateModel(
   onEvent: (e: AIModelEvent) => void,
   model = 'deepseek-chat',
   baseModel = '',
+  engine = 'procedural',
 ): Promise<void> {
   const res = await fetch(`${API_BASE}/models/ai-generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, model, base_model: baseModel }),
+    body: JSON.stringify({ prompt, model, base_model: baseModel, engine }),
   });
   if (!res.body) throw new Error('无响应流');
   const reader = res.body.getReader();

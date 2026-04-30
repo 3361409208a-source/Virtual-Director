@@ -6,6 +6,7 @@ from backend.services.llm import llm_call, set_model
 from backend.tools.definitions import ai_model_tool
 from backend.services.glb_builder import build_glb
 from backend.config import GODOT_DIR
+from backend.services.open3d_generator import Open3DGeneratorUnavailable, generate_open3d_asset
 
 CUSTOM_DIR = os.path.join(GODOT_DIR, "assets", "custom")
 
@@ -36,6 +37,15 @@ async def generate_single_asset(actor_id: str, prompt: str, model: str = "astron
     def _cb(msg: str):
         if progress_cb:
             progress_cb(f"🧱 [{actor_id}] {msg}")
+
+    _cb("尝试开源高精 3D 生成引擎...")
+    try:
+        open3d_result = await asyncio.to_thread(generate_open3d_asset, prompt, actor_id)
+        rel_path = os.path.relpath(open3d_result["path"], GODOT_DIR).replace("\\", "/")
+        _cb(f"✅ 开源高精建模完成: {open3d_result['filename']}")
+        return rel_path
+    except Open3DGeneratorUnavailable as e:
+        _cb(f"开源高精引擎不可用，回退程序化建模: {e}")
 
     _cb("AI 正在构思建模方案...")
     system = get_system_prompt()

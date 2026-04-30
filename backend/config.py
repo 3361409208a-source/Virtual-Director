@@ -42,6 +42,10 @@ SKETCHFAB_API_KEY  = os.environ.get("SKETCHFAB_API_KEY",  "")
 # Enable/disable model search/download. If disabled, AI will always use composite modeling
 ENABLE_MODEL_SEARCH = os.environ.get("ENABLE_MODEL_SEARCH", "true").lower() == "true"
 
+# Optional local open-source 3D generator service.
+# Recommended backend: Tencent Hunyuan3D-2 running as a separate local service.
+OPEN3D_GENERATOR_URL = os.environ.get("OPEN3D_GENERATOR_URL", "").rstrip("/")
+
 SILICONFLOW_API_KEY  = os.environ.get("SILICONFLOW_API_KEY", "")
 SILICONFLOW_BASE_URL = "https://api.siliconflow.cn/v1"
 SILICONFLOW_IMAGE_MODEL = "Kwai-Kolors/Kolors"

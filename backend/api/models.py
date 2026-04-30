@@ -11,6 +11,7 @@ from backend.services.llm import llm_call, set_model, get_token_usage
 from backend.tools.definitions import ai_model_tool
 from backend.services.glb_builder import build_glb
 from backend.services.asset_generator import get_system_prompt
+from backend.services.open3d_generator import Open3DGeneratorUnavailable, generate_open3d_asset
 
 router = APIRouter()
 
@@ -92,6 +93,7 @@ class AIGenerateRequest(BaseModel):
     prompt: str
     model: str = "astron-code-latest"
     base_model: str = ""   # optional reference model name
+    engine: str = "procedural"  # procedural | open3d | auto
 
 def _sse(obj: dict) -> str:
     return f"data: {json.dumps(obj, ensure_ascii=False)}\n\n"
@@ -114,6 +116,30 @@ async def ai_generate_model(req: AIGenerateRequest):
     async def stream():
         try:
             yield _sse({"step": "start", "msg": "🤖 AI 开始分析建模方案..."})
+
+            if req.engine in {"open3d", "auto"}:
+                yield _sse({"step": "building", "msg": "🧬 正在调用开源高精 3D 生成引擎（Hunyuan3D/兼容服务）..."})
+                open3d_name = re.sub(r"[^\w\-]", "_", req.prompt[:32] or "open3d_model")
+                try:
+                    open3d_result = await asyncio.to_thread(generate_open3d_asset, req.prompt, open3d_name)
+                    yield _sse({
+                        "step":        "done",
+                        "msg":         f"✅ 开源高精模型生成完成：{open3d_result['filename']} ({open3d_result['size_kb']} KB)",
+                        "filename":    open3d_result["filename"],
+                        "model_name":  os.path.splitext(open3d_result["filename"])[0],
+                        "description": req.prompt,
+                        "parts_count": 0,
+                        "size_kb":     open3d_result["size_kb"],
+                        "url":         open3d_result["url"],
+                        "parts":       [],
+                        "tokens":      {"input": 0, "output": 0},
+                    })
+                    return
+                except Open3DGeneratorUnavailable as e:
+                    if req.engine == "open3d":
+                        yield _sse({"step": "building", "msg": f"⚠️ 开源高精引擎不可用，回退到程序化建模：{e}"})
+                    else:
+                        yield _sse({"step": "building", "msg": f"⚠️ 开源高精引擎不可用，自动切换到程序化建模：{e}"})
 
             # Run LLM in thread, stream tokens via queue
             result_holder: dict = {}
