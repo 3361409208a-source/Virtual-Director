@@ -6,11 +6,9 @@ from backend.config import GODOT_DIR
 from backend.services.asset_generator import generate_single_asset
 import asyncio
 
-def run_asset_agent(prompt: str, director: dict, progress_cb=None, token_cb=None, model_override=None) -> dict:
+def run_asset_agent(prompt: str, director: dict, progress_cb=None, token_cb=None, model_override=None, base_model: str = "") -> dict:
     """
     Worker E: Two-phase asset pipeline.
-    Phase 1 — LLM generates search queries per actor, then fetch GLB from open-source sites.
-    Phase 2 — Composite fallback (box/sphere/cylinder) for actors that couldn't be fetched.
     """
     def _cb(msg: str):
         if progress_cb:
@@ -25,6 +23,37 @@ def run_asset_agent(prompt: str, director: dict, progress_cb=None, token_cb=None
     
     brief     = director.get("asset_brief", "")
     manifest_dict: dict = {}
+
+    # Identify which entity should use the base_model if provided
+    base_entity_id = None
+    if base_model:
+        # Heuristic 1: If there's only one entity, it must be the one
+        if len(entities) == 1:
+            base_entity_id = entities[0]
+            print(f"[AssetAgent] Only one entity, auto-matching base_model '{base_model}' to '{base_entity_id}'")
+        else:
+            # Heuristic 2: Scan asset_brief for the exact link
+            lines = brief.lower().split('\n')
+            for aid in entities:
+                aid_norm = aid.lower().replace('_', ' ')
+                base_norm = base_model.lower().replace('_', ' ')
+                for line in lines:
+                    line_lower = line.lower()
+                    if (aid.lower() in line_lower or aid_norm in line_lower) and \
+                       (base_model.lower() in line_lower or base_norm in line_lower):
+                        base_entity_id = aid
+                        print(f"[AssetAgent] Heuristic match: base_model '{base_model}' -> entity '{aid}'")
+                        break
+                if base_entity_id: break
+            
+            # Heuristic 3: If still not found, check if base_model name is contained in aid
+            if not base_entity_id:
+                base_norm = base_model.lower().replace('_', '')
+                for aid in entities:
+                    if base_norm in aid.lower().replace('_', ''):
+                        base_entity_id = aid
+                        print(f"[AssetAgent] Name match: base_model '{base_model}' -> entity '{aid}'")
+                        break
 
     # ── Phase 1: LLM decides search queries ───────────────────────────────────
     fetched: set = set()
@@ -81,6 +110,12 @@ def run_asset_agent(prompt: str, director: dict, progress_cb=None, token_cb=None
             size     = item.get("target_size", {"x": 1, "y": 1, "z": 1})
             if not actor_id:
                 continue
+
+            # Force specific model if this is the base entity
+            if base_model and actor_id == base_entity_id:
+                query = base_model
+                print(f"[AssetAgent] Overriding query for '{actor_id}' to exact base_model: '{query}'")
+
             _cb(f"🌐 [资产AI] {actor_id} → 检索 \"{query}\"...")
             path = fetch_model(actor_id, query, on_progress=_cb)
             if path:
@@ -130,7 +165,7 @@ def run_asset_agent(prompt: str, director: dict, progress_cb=None, token_cb=None
                 else:
                     manifest_dict[aid] = None
 
-    loop.run_until_complete(run_modeling())
+        loop.run_until_complete(run_modeling())
 
     print(f"[AssetAgent] 完成: {len(fetched)} 下载 + {len(remaining)} 建模")
     return {"asset_manifest": manifest_dict}

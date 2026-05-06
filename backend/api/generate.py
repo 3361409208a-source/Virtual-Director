@@ -109,7 +109,7 @@ async def generate_video(req: PromptRequest):
             _dir_err: list = []
             def _run_director_thread():
                 try:
-                    _dir_result['v'] = run_director(req.prompt, ctx, token_cb=_dir_token_cb)
+                    _dir_result['v'] = run_director(req.prompt, ctx, token_cb=_dir_token_cb, base_model=req.base_model)
                 except Exception as _e:
                     _dir_err.append(_e)
                 finally:
@@ -183,7 +183,7 @@ async def generate_video(req: PromptRequest):
             asyncio.create_task(_run("actor",   run_actor_agent,   req.prompt, director, ctx, _make_token_cb("actor"), worker_model))
             asyncio.create_task(_run("camera",  run_camera_agent,  req.prompt, director,      _make_token_cb("camera"), worker_model))
             asyncio.create_task(_run("physics", run_physics_agent, req.prompt, director,      _make_token_cb("physics"), worker_model))
-            asyncio.create_task(_run("asset",   run_asset_agent,   req.prompt, director, _asset_progress_cb, _make_token_cb("asset"), worker_model))
+            asyncio.create_task(_run("asset",   run_asset_agent,   req.prompt, director, _asset_progress_cb, _make_token_cb("asset"), worker_model, req.base_model))
 
             labels = {
                 "scene":   "🏗️ [场景美术]",

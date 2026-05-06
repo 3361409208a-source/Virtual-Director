@@ -116,42 +116,78 @@ def _run_actor_agent_single(prompt: str, director: dict, token_cb=None, model_ov
 def run_actor_agent(prompt: str, director: dict, scene_ctx: dict, token_cb=None, model_override=None) -> dict:
     """
     Worker B: Define actors and generate per-actor keyframe animation tracks.
-    Must use the exact actor IDs provided by the director.
-    Returns a dict containing 'actors' and 'actor_tracks'.
     """
     actor_ids = list(director.get("actor_ids") or [])
-    if len(actor_ids) <= 1:
+    total_duration = director.get("meta", {}).get("total_duration", 10)
+
+    # Use a faster model for workers if not explicitly overridden
+    if not model_override or model_override == "auto":
+        model_override = "deepseek-v4-flash"
+
+    # Parallel strategy: 
+    # 1. If multiple actors, split by actors (as before)
+    # 2. If single actor and duration > 5s, split by time segments
+    
+    if len(actor_ids) > 1:
+        chunks = _actor_chunks(actor_ids, max_workers=4)
+        worker_func = _run_actor_agent_single
+        args_list = [(prompt, director, None, model_override, chunk) for chunk in chunks]
+    elif len(actor_ids) == 1 and total_duration > 6:
+        # Single actor speed-up: Split into 5s segments
+        seg_duration = 5.0
+        num_segs = int(total_duration // seg_duration) + (1 if total_duration % seg_duration > 0 else 0)
+        
+        # We simulate multiple "directors" each with a shorter duration to trick the LLM
+        # into focusing on just one part of the timeline
+        args_list = []
+        for i in range(num_segs):
+            t_start = i * seg_duration
+            t_end = min((i + 1) * seg_duration, total_duration)
+            seg_director = json.loads(json.dumps(director)) # Deep copy
+            seg_director["actors_brief"] += f"\n【本次核心任务】：仅计算 t={t_start}s 到 t={t_end}s 之间的动作关键帧。请确保与前后时间衔接顺滑。"
+            args_list.append((prompt, seg_director, None, model_override, actor_ids))
+        worker_func = _run_actor_agent_single
+    else:
         return _run_actor_agent_single(prompt, director, token_cb=token_cb, model_override=model_override)
 
-    chunks = _actor_chunks(actor_ids, max_workers=4)
     if token_cb:
         try:
-            token_cb(f"\n🎭 [动画导演] 拆分为 {len(chunks)} 个动作小组并行规划...\n")
-        except Exception:
-            pass
+            token_cb(f"\n🎭 [动画导演] 启动 {len(args_list)} 路 Flash 并行引擎加速动作规划...\n")
+        except Exception: pass
 
     try:
         results = []
-        with ThreadPoolExecutor(max_workers=len(chunks)) as pool:
-            future_map = {
-                pool.submit(_run_actor_agent_single, prompt, director, None, model_override, chunk): chunk
-                for chunk in chunks
-            }
+        with ThreadPoolExecutor(max_workers=len(args_list)) as pool:
+            future_map = {pool.submit(worker_func, *args): i for i, args in enumerate(args_list)}
             for future in as_completed(future_map):
-                chunk = future_map[future]
                 results.append(future.result())
-                if token_cb:
-                    try:
-                        token_cb(f"✅ 动作小组完成：{', '.join(chunk)}\n")
-                    except Exception:
-                        pass
-        return _merge_actor_results(results, actor_ids)
-    except Exception:
+        
+        if len(actor_ids) > 1:
+            return _merge_actor_results(results, actor_ids)
+        else:
+            # Merge time segments for single actor
+            final_actor = results[0]["actors"][0]
+            final_tracks = {actor_ids[0]: []}
+            # Collect all keyframes, sort by time, remove duplicates
+            all_kfs = []
+            for r in results:
+                all_kfs.extend(r.get("actor_tracks", {}).get(actor_ids[0], []))
+            all_kfs.sort(key=lambda x: x.get("time", 0))
+            
+            # De-duplicate keyframes at the same timestamp
+            seen_times = set()
+            for kf in all_kfs:
+                t = round(kf.get("time", 0), 2)
+                if t not in seen_times:
+                    final_tracks[actor_ids[0]].append(kf)
+                    seen_times.add(t)
+            return {"actors": [final_actor], "actor_tracks": final_tracks}
+
+    except Exception as e:
+        print(f"[ActorAgent] Parallel error: {e}")
         if token_cb:
-            try:
-                token_cb("⚠️ 并行动作规划回退为单组动画导演...\n")
-            except Exception:
-                pass
+            try: token_cb("⚠️ 并行加速失效，回退到单组串行模式...\n")
+            except Exception: pass
         return _run_actor_agent_single(prompt, director, token_cb=token_cb, model_override=model_override)
 
 

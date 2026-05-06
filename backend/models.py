@@ -7,6 +7,7 @@ class PromptRequest(BaseModel):
     model: str = "astron-code-latest"
     worker_model: str = "auto"
     renderer: Literal["godot", "blender"] = "godot"
+    base_model: str = ""  # optional reference model name from library
 
 
 

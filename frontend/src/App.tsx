@@ -116,10 +116,10 @@ export default function App() {
       return { ...m, entries: [...entries, { step, msg, ts: Date.now() }] };
     }));
 
-  const handleSend = async () => {
-    if (!input.trim() || isRendering) return;
+  const startVideoGeneration = async (userPrompt: string, baseModel: string = '') => {
+    if (!userPrompt.trim() || isRendering) return;
 
-    const userMsg: Message = { id: Date.now().toString(), type: 'user', text: input };
+    const userMsg: Message = { id: Date.now().toString(), type: 'user', text: userPrompt };
     const logId             = (Date.now() + 1).toString();
     const logMsg: Message   = { id: logId, type: 'log', text: '', entries: [] };
 
@@ -130,9 +130,10 @@ export default function App() {
     setViewingProject(null);
     setStreamLog([]);
     setReviewState(null);
+    setView('director'); // Ensure we are on director view to see the logs
 
     try {
-      await streamGenerate(input, event => {
+      await streamGenerate(userPrompt, event => {
         if (event.step === 'rendering') {
           updateLastEntry(logId, 'rendering', event.msg);
         } else if (event.step !== 'stream') {
@@ -174,7 +175,7 @@ export default function App() {
           setReviewState(null);
           setView('director');
         }
-      }, model, renderer, settingsStore.getSettings().workerModel);
+      }, model, renderer, settingsStore.getSettings().workerModel, baseModel);
     } catch (err: unknown) {
       appendEntry(logId, {
         step: 'error',
@@ -185,6 +186,8 @@ export default function App() {
       setReviewState(null);
     }
   };
+
+  const handleSend = () => startVideoGeneration(input);
 
   const handleViewChange = (newView: ViewMode) => {
     // Save current model and renderer before switching
@@ -296,14 +299,14 @@ export default function App() {
                 }}
               />
             ) : (
-              <ModelLibraryPanel isStandalone={true} initialTab="ai" />
+              <ModelLibraryPanel isStandalone={true} initialTab="ai" onStartVideo={startVideoGeneration} />
             )}
           </div>
         )}
 
         {view === 'library' && (
           <div className="library-view">
-            <ModelLibraryPanel isStandalone={true} initialTab="library" />
+            <ModelLibraryPanel isStandalone={true} initialTab="library" onStartVideo={startVideoGeneration} />
           </div>
         )}
         

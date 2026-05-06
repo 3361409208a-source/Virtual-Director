@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { SceneSequence } from '../types';
-import { confirmReview, rejectReview, streamAiGenerateModel, type AIModelEvent } from '../services/api';
+import { confirmReview, rejectReview, streamAiGenerateModel, listModels, assignModel, type AIModelEvent, type ModelMeta } from '../services/api';
 import { ThreeModelPreview } from './ThreeModelPreview';
 
 // ── Icons ──────────────────────────────────────────────────────────────────
@@ -13,6 +13,8 @@ const IconActor = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="no
 const IconTrack = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 18l5-5-5-5"/><path d="M6 18l5-5-5-5"/></svg>;
 const IconCamera = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><path d="M8 21h8"/><path d="M12 17v4"/><path d="m3 7 9 9 9-9"/></svg>;
 const IconEnvironment = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 18a5 5 0 0 0-10 0"/><line x1="12" x2="12" y1="2" y2="9"/><line x1="4.22" x2="5.64" y1="10.22" y2="11.64"/><line x1="1" x2="3" y1="18" y2="18"/><line x1="21" x2="23" y1="18" y2="18"/><line x1="18.36" x2="19.78" y1="11.64" y2="10.22"/><line x1="23" x2="23" y1="22" y2="22"/><line x1="1" x2="1" y1="22" y2="22"/></svg>;
+const IconSearch = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>;
+const IconPackage = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m16.5 9.4-9-5.19M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" x2="12" y1="22.08" y2="12"/></svg>;
 
 interface Props {
   sid: string;
@@ -158,6 +160,36 @@ function AssetRegenerator({ actorId, currentAsset, model, onDone }: RegeneratorP
   const [currentTokens, setCurrentTokens] = useState<{ input: number; output: number } | undefined>(undefined);
   const logEndRef = useRef<HTMLDivElement>(null);
 
+  const [showPicker, setShowPicker] = useState(false);
+  const [libraryModels, setLibraryModels] = useState<ModelMeta[]>([]);
+  const [pickerLoading, setPickerLoading] = useState(false);
+  const [pickerSearch, setPickerSearch] = useState('');
+
+  const openPicker = async () => {
+    setShowPicker(true);
+    setPickerLoading(true);
+    try { setLibraryModels(await listModels()); } catch (e) { console.error(e); }
+    setPickerLoading(false);
+  };
+
+  const handlePickModel = async (m: ModelMeta) => {
+    setShowPicker(false);
+    setGenerating(true);
+    setLog([`📦 从仓库加载: ${m.filename}...`]);
+    try {
+      const result = await assignModel(m.category, m.filename, safeId);
+      setLog(prev => [...prev, `✅ 模型已就绪: ${result.filename}`]);
+      onDone(result.url);
+    } catch (e) {
+      setLog(prev => [...prev, `❌ ${String(e)}`]);
+    }
+    setGenerating(false);
+  };
+
+  const filteredModels = libraryModels.filter(m =>
+    !pickerSearch || m.name.toLowerCase().includes(pickerSearch.toLowerCase()) || m.filename.toLowerCase().includes(pickerSearch.toLowerCase())
+  );
+
   const formatTokens = (tokens?: { input: number; output: number }) => {
     if (!tokens) return '0';
     const total = tokens.input + tokens.output;
@@ -225,7 +257,7 @@ function AssetRegenerator({ actorId, currentAsset, model, onDone }: RegeneratorP
     <div className="asset-regen-item">
       <div className="asset-regen-header">
         <div className="asset-regen-info">
-          <span className="asset-regen-id"><IconActor /> {safeId}</span>
+          <span className="asset-regen-id"><IconPackage /> {safeId}</span>
           <span className="asset-regen-status">
              {isComposite ? <><IconBox /> 积木拼装</> : <><IconBox /> 外部模型：{currentAsset?.path?.split('/').pop()}</>}
           </span>
@@ -265,7 +297,52 @@ function AssetRegenerator({ actorId, currentAsset, model, onDone }: RegeneratorP
         >
           {generating ? '⏳ 生成中...' : <><IconSparkles /> AI 重新建模</>}
         </button>
+        <button
+          className="asset-regen-btn secondary"
+          onClick={openPicker}
+          disabled={generating}
+        >
+          <IconBox /> 从仓库选择
+        </button>
       </div>
+
+      {showPicker && (
+        <div className="model-picker-overlay" onClick={() => setShowPicker(false)}>
+          <div className="model-picker-modal" onClick={e => e.stopPropagation()}>
+            <div className="model-picker-header">
+              <h3><IconPackage /> 选择资产模型: "{safeId}"</h3>
+              <button className="model-picker-close" onClick={() => setShowPicker(false)}>×</button>
+            </div>
+            <div className="model-picker-search">
+              <IconSearch />
+              <input 
+                placeholder="搜索模型库..." 
+                value={pickerSearch} 
+                onChange={e => setPickerSearch(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className="model-picker-list">
+              {pickerLoading ? (
+                <div className="model-picker-loading">正在加载仓库...</div>
+              ) : filteredModels.length === 0 ? (
+                <div className="model-picker-empty">未找到匹配模型</div>
+              ) : (
+                filteredModels.map(m => (
+                  <div 
+                    key={m.id} 
+                    className="model-picker-item"
+                    onClick={() => handlePickModel(m)}
+                  >
+                    <span className="model-picker-name">{m.name}</span>
+                    <span className="model-picker-meta">{m.category} / {m.filename} ({m.size_kb} KB)</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {log.length > 0 && (
         <div className="asset-regen-log">
@@ -362,10 +439,9 @@ export function SceneReviewPanel({ sid, sequence: initialSequence, model, onConf
           {activeTab === 'assets' && (
             <div className="scene-review-assets">
               <div className="review-section-hint">
-                <IconSparkles /> 如果 AI 下载或拼装的模型不满意，可以在此处输入描述重新生成专属 GLB 模型。
+                <IconSparkles /> 如果 AI 下载或拼装的模型不满意，可以在此处输入描述重新生成专属 GLB 模型，或从库中直接替换。
               </div>
-              {(seq.actors ?? []).map((actor, idx) => {
-                const aid: string = actor.actor_id ?? `actor_${idx}`;
+              {Object.keys(seq.asset_manifest || {}).sort().map((aid, idx) => {
                 return (
                 <AssetRegenerator
                   key={aid + '_' + idx}
@@ -383,7 +459,7 @@ export function SceneReviewPanel({ sid, sequence: initialSequence, model, onConf
                           actor_id: aid,
                           type: 'downloaded',
                           path: newPath,
-                          target_size: { x: 1, y: 1, z: 1 }
+                          target_size: prev.asset_manifest?.[aid]?.target_size || { x: 1, y: 1, z: 1 }
                         }
                       }
                     }));

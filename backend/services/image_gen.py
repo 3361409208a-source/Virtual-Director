@@ -3,11 +3,15 @@ import requests
 import time
 from backend.config import SILICONFLOW_API_KEY, SILICONFLOW_BASE_URL, SILICONFLOW_IMAGE_MODEL
 
+# Global session to reuse connections
+_session = requests.Session()
+
 def generate_cover_image(prompt: str, output_path: str) -> str:
     """
     Generate a cover image using SiliconFlow's Kolors model.
     Returns the local path to the saved image.
     """
+    global _session
     if not SILICONFLOW_API_KEY:
         print("Warning: SILICONFLOW_API_KEY not set. Skipping cover generation.")
         return ""
@@ -27,7 +31,7 @@ def generate_cover_image(prompt: str, output_path: str) -> str:
 
     try:
         print(f"Generating cover image with SiliconFlow ({SILICONFLOW_IMAGE_MODEL})...")
-        response = requests.post(url, json=payload, headers=headers, timeout=60)
+        response = _session.post(url, json=payload, headers=headers, timeout=60)
         response.raise_for_status()
         data = response.json()
         
@@ -43,8 +47,8 @@ def generate_cover_image(prompt: str, output_path: str) -> str:
             print(f"Failed to find image URL in response: {data}")
             return ""
 
-        # Download image
-        img_data = requests.get(image_url).content
+        # Download image using the same session
+        img_data = _session.get(image_url).content
         with open(output_path, "wb") as f:
             f.write(img_data)
         

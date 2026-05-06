@@ -10,7 +10,7 @@ export interface ModelingState {
   error: string;
   prompt: string;
   llm: string;
-  engine: string;
+  style: string;
   tokens?: { input: number; output: number };
   parts: any[]; // New: captured parts
 }
@@ -23,7 +23,7 @@ class ModelingStore {
     error: '',
     prompt: '',
     llm: 'astron-code-latest',
-    engine: 'procedural',
+    style: 'realistic',
     parts: [],
   };
 
@@ -54,12 +54,12 @@ class ModelingStore {
     this.notify();
   }
 
-  setEngine(engine: string) {
-    this.state.engine = engine;
+  setStyle(style: string) {
+    this.state.style = style;
     this.notify();
   }
 
-  async startGenerate(prompt: string, llm: string, baseModel: string = '', engine: string = this.state.engine) {
+  async startGenerate(prompt: string, llm: string, baseModel: string = '', style: string = this.state.style) {
     if (this.state.isGenerating) return;
 
     this.state.isGenerating = true;
@@ -69,7 +69,7 @@ class ModelingStore {
     this.state.error = '';
     this.state.prompt = prompt;
     this.state.llm = llm;
-    this.state.engine = engine;
+    this.state.style = style;
     this.state.tokens = { input: 0, output: 0 };
     this.notify();
 
@@ -153,7 +153,7 @@ class ModelingStore {
         },
         llm,
         baseModel,
-        engine
+        style
       );
     } catch (e) {
       this.state.error = e instanceof Error ? e.message : String(e);

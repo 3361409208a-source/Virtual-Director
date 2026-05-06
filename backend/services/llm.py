@@ -25,32 +25,45 @@ _token_usage_var: ContextVar[dict] = ContextVar("token_usage", default={"input":
 
 
 
+# Cache for LLM clients to reuse connection pools
+_client_cache = {}
+
 def _get_client_config(selection: str):
     """Return the correct OpenAI client and model name for the given selection."""
+    global _client_cache
+    
     if selection.startswith("deepseek"):
-        return OpenAI(
-            api_key=DEEPSEEK_API_KEY,
-            base_url=DEEPSEEK_BASE_URL,
-            timeout=120.0,
-            max_retries=3
-        ), selection
+        cache_key = f"deepseek_{DEEPSEEK_BASE_URL}"
+        if cache_key not in _client_cache:
+            _client_cache[cache_key] = OpenAI(
+                api_key=DEEPSEEK_API_KEY,
+                base_url=DEEPSEEK_BASE_URL,
+                timeout=120.0,
+                max_retries=3
+            )
+        return _client_cache[cache_key], selection
 
     elif selection in ["GLM-4.7-Flash", "Kimi-K2.6"]:
-        return OpenAI(
-            api_key=GLM_API_KEY,
-            base_url=GLM_BASE_URL,
-            timeout=120.0,
-            max_retries=3
-        ), GLM_MODEL if selection == "GLM-4.7-Flash" else selection
+        cache_key = f"glm_{GLM_BASE_URL}"
+        if cache_key not in _client_cache:
+            _client_cache[cache_key] = OpenAI(
+                api_key=GLM_API_KEY,
+                base_url=GLM_BASE_URL,
+                timeout=120.0,
+                max_retries=3
+            )
+        return _client_cache[cache_key], GLM_MODEL if selection == "GLM-4.7-Flash" else selection
 
     elif selection == "astron-code-latest":
-        # Astron / Aliyun Maas API (OpenAI-compatible)
-        return OpenAI(
-            api_key=ANTHROPIC_API_KEY,
-            base_url=ANTHROPIC_BASE_URL,
-            timeout=120.0,
-            max_retries=3
-        ), "astron-code-latest"
+        cache_key = f"astron_{ANTHROPIC_BASE_URL}"
+        if cache_key not in _client_cache:
+            _client_cache[cache_key] = OpenAI(
+                api_key=ANTHROPIC_API_KEY,
+                base_url=ANTHROPIC_BASE_URL,
+                timeout=120.0,
+                max_retries=3
+            )
+        return _client_cache[cache_key], "astron-code-latest"
 
     return None, None
 

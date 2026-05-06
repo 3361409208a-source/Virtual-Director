@@ -3,14 +3,19 @@ from backend.services.llm import llm_call
 from backend.tools.definitions import director_tool
 
 
-def run_director(prompt: str, scene_ctx: dict, token_cb=None) -> dict:
+def run_director(prompt: str, scene_ctx: dict, token_cb=None, base_model: str = "") -> dict:
     """
     Phase 1: Analyze the user's prompt and decompose it into briefs for three
     worker agents (scene, actor, camera).  Also decides total duration and actor IDs.
     """
+    base_ctx = ""
+    if base_model:
+        base_ctx = f"\n【关键要求：本视频必须以资产库中的模型 '{base_model}' 为绝对主角。请确保 actor_ids 中包含一个代表该资产的 ID，并在 asset_brief 中明确标注该 ID 对应的描述为 '{base_model}'。资产组会自动通过该名称匹配库中模型。】\n"
+
     system = (
         "你是好莱坞级别的制片总监（Executive Producer + Director）。"
         "你的职责是将用户的创意意图转化为可执行的分镜指令包，分发给下游五个专项AI组。\n\n"
+        f"{base_ctx}"
 
         "【命名规范】：\n"
         "所有实体（演员/道具）必须使用英文 snake_case，且名称本身就能说明外观。\n"

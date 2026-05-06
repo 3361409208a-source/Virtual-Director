@@ -90,12 +90,12 @@ export async function streamAiGenerateModel(
   onEvent: (e: AIModelEvent) => void,
   model = 'deepseek-chat',
   baseModel = '',
-  engine = 'procedural',
+  style = 'realistic',
 ): Promise<void> {
   const res = await fetch(`${API_BASE}/models/ai-generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, model, base_model: baseModel, engine }),
+    body: JSON.stringify({ prompt, model, base_model: baseModel, style }),
   });
   if (!res.body) throw new Error('无响应流');
   const reader = res.body.getReader();
@@ -180,11 +180,12 @@ export async function streamGenerate(
   model: string = 'deepseek-chat',
   renderer: 'godot' | 'blender' = 'godot',
   workerModel: string = 'auto',
+  baseModel: string = '',
 ): Promise<void> {
   const response = await fetch(`${API_BASE}/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, model, renderer, worker_model: workerModel }),
+    body: JSON.stringify({ prompt, model, renderer, worker_model: workerModel, base_model: baseModel }),
   });
 
   if (!response.body) throw new Error('无响应流');
@@ -228,4 +229,15 @@ export async function confirmReview(sid: string, sequence: object): Promise<void
 /** 用户取消方案 */
 export async function rejectReview(sid: string): Promise<void> {
   await fetch(`${API_BASE}/review/${sid}/reject`, { method: 'POST' });
+}
+
+/** 从模型库分配模型给演员 */
+export async function assignModel(category: string, filename: string, actorId: string): Promise<{ path: string; url: string; filename: string }> {
+  const res = await fetch(`${API_BASE}/models/assign`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ category, filename, actor_id: actorId }),
+  });
+  if (!res.ok) throw new Error('模型分配失败');
+  return res.json();
 }

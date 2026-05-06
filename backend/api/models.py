@@ -11,7 +11,7 @@ from backend.services.llm import llm_call, set_model, get_token_usage
 from backend.tools.definitions import ai_model_tool
 from backend.services.glb_builder import build_glb
 from backend.services.asset_generator import get_system_prompt
-from backend.services.open3d_generator import Open3DGeneratorUnavailable, generate_open3d_asset
+from backend.services.voxel_generator import generate_voxel_asset
 
 router = APIRouter()
 
@@ -93,7 +93,7 @@ class AIGenerateRequest(BaseModel):
     prompt: str
     model: str = "astron-code-latest"
     base_model: str = ""   # optional reference model name
-    engine: str = "procedural"  # procedural | open3d | auto
+    style: str = "realistic"   # realistic | minecraft
 
 def _sse(obj: dict) -> str:
     return f"data: {json.dumps(obj, ensure_ascii=False)}\n\n"
@@ -117,29 +117,30 @@ async def ai_generate_model(req: AIGenerateRequest):
         try:
             yield _sse({"step": "start", "msg": "🤖 AI 开始分析建模方案..."})
 
-            if req.engine in {"open3d", "auto"}:
-                yield _sse({"step": "building", "msg": "🧬 正在调用开源高精 3D 生成引擎（Hunyuan3D/兼容服务）..."})
-                open3d_name = re.sub(r"[^\w\-]", "_", req.prompt[:32] or "open3d_model")
+            if req.style == "minecraft":
+                yield _sse({"step": "building", "msg": "🟫 正在启动我的世界体素引擎..."})
+                mc_name = re.sub(r"[^\w\-]", "_", req.prompt[:32] or "voxel_model")
+                def _mc_progress(msg):
+                    asyncio.run_coroutine_threadsafe(token_q.put({"type": "content", "msg": f"{msg}\n"}), loop)
                 try:
-                    open3d_result = await asyncio.to_thread(generate_open3d_asset, req.prompt, open3d_name)
+                    mc_result = await asyncio.to_thread(
+                        generate_voxel_asset, req.prompt, mc_name, req.model, _mc_progress
+                    )
                     yield _sse({
                         "step":        "done",
-                        "msg":         f"✅ 开源高精模型生成完成：{open3d_result['filename']} ({open3d_result['size_kb']} KB)",
-                        "filename":    open3d_result["filename"],
-                        "model_name":  os.path.splitext(open3d_result["filename"])[0],
+                        "msg":         f"✅ 我的世界模型生成完成：{mc_result['filename']} ({mc_result['size_kb']} KB，{mc_result.get('blocks_count', 0)} 块)",
+                        "filename":    mc_result["filename"],
+                        "model_name":  os.path.splitext(mc_result["filename"])[0],
                         "description": req.prompt,
-                        "parts_count": 0,
-                        "size_kb":     open3d_result["size_kb"],
-                        "url":         open3d_result["url"],
+                        "parts_count": mc_result.get("blocks_count", 0),
+                        "size_kb":     mc_result["size_kb"],
+                        "url":         mc_result["url"],
                         "parts":       [],
                         "tokens":      {"input": 0, "output": 0},
                     })
                     return
-                except Open3DGeneratorUnavailable as e:
-                    if req.engine == "open3d":
-                        yield _sse({"step": "building", "msg": f"⚠️ 开源高精引擎不可用，回退到程序化建模：{e}"})
-                    else:
-                        yield _sse({"step": "building", "msg": f"⚠️ 开源高精引擎不可用，自动切换到程序化建模：{e}"})
+                except Exception as e:
+                    yield _sse({"step": "building", "msg": f"⚠️ 体素生成失败，回退到程序化建模：{e}"})
 
             # Run LLM in thread, stream tokens via queue
             result_holder: dict = {}
@@ -234,3 +235,37 @@ def delete_custom_model(filename: str):
         raise HTTPException(status_code=404, detail="File not found")
     os.remove(path)
     return {"ok": True}
+
+
+# ── Assign a library model to an actor ─────────────────────────────────────
+
+class AssignModelRequest(BaseModel):
+    category: str   # builtin | downloaded | custom
+    filename: str
+    actor_id: str = ""
+
+@router.post("/models/assign")
+def assign_model(req: AssignModelRequest):
+    if not req.filename.lower().endswith(".glb"):
+        raise HTTPException(status_code=400, detail="Only GLB files supported")
+    src_dir = _CATEGORIES.get(req.category)
+    if not src_dir:
+        raise HTTPException(status_code=400, detail=f"Unknown category: {req.category}")
+    src = os.path.join(src_dir, req.filename)
+    if not os.path.exists(src):
+        raise HTTPException(status_code=404, detail="Source model not found")
+
+    safe_id = re.sub(r"[^\w\-]", "_", req.actor_id) if req.actor_id else "assigned"
+    new_name = f"{safe_id}_{req.filename}"
+    dest = os.path.join(_CATEGORIES["custom"], new_name)
+    os.makedirs(_CATEGORIES["custom"], exist_ok=True)
+    shutil.copy2(src, dest)
+
+    rel = os.path.relpath(dest, GODOT_DIR).replace("\\", "/")
+    return {
+        "ok": True,
+        "path": rel,
+        "url": f"/api/models/custom/{new_name}",
+        "filename": new_name,
+        "size_kb": os.path.getsize(dest) // 1024,
+    }

@@ -19,7 +19,11 @@ const CAT_COLOR: Record<string, string> = {
 
 export type Tab = 'library' | 'ai';
 
-export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library' }: { isStandalone?: boolean, initialTab?: Tab }) {
+export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library', onStartVideo }: { 
+  isStandalone?: boolean, 
+  initialTab?: Tab,
+  onStartVideo?: (prompt: string, baseModel: string) => Promise<void>
+}) {
   const [open, setOpen]           = useState(isStandalone);
   const [tab, setTab]             = useState<Tab>(initialTab);
   const [models, setModels]       = useState<ModelMeta[]>([]);
@@ -34,6 +38,10 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
   const [showTemp, setShowTemp]   = useState(false);
   const [previewPreset] = useState<any>('studio');
   const [isOptimizing, setIsOptimizing] = useState(false);
+
+  const [showActionInput, setShowActionInput] = useState(false);
+  const [actionPrompt, setActionPrompt] = useState('');
+  const [isStartingVideo, setIsStartingVideo] = useState(false);
   
   // Resizable split state
   const [splitWidth, setSplitWidth] = useState(window.innerWidth * 0.65); // Default ~70% for right panel
@@ -51,10 +59,10 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
   }, []);
 
   const [refining, setRefining] = useState(false);
-  const { isGenerating: aiGenerating, logs: aiLog, result: aiResult, error: aiError, prompt: aiPrompt, llm: aiLlm, engine: aiEngine, tokens: aiTokens } = mState;
+  const { isGenerating: aiGenerating, logs: aiLog, result: aiResult, error: aiError, prompt: aiPrompt, llm: aiLlm, style: aiStyle, tokens: aiTokens } = mState;
   const setAiPrompt = (p: string) => modelingStore.setPrompt(p);
   const setAiLlm = (l: string) => modelingStore.setLlm(l);
-  const setAiEngine = (engine: string) => modelingStore.setEngine(engine);
+  const setAiStyle = (style: string) => modelingStore.setStyle(style);
 
   // Auto-collapse/expand log based on generation state
   useEffect(() => {
@@ -105,6 +113,18 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
     }
   };
 
+  const handleStartActionVideo = async () => {
+    if (!preview || !actionPrompt.trim() || !onStartVideo) return;
+    setIsStartingVideo(true);
+    try {
+      await onStartVideo(actionPrompt, preview.name);
+      setShowActionInput(false);
+      setActionPrompt('');
+    } finally {
+      setIsStartingVideo(false);
+    }
+  };
+
   const handleDelete = async (m: ModelMeta) => {
     if (!confirm(`删除 ${m.filename}？`)) return;
     await deleteCustomModel(m.filename);
@@ -114,7 +134,7 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
 
   const handleAiGenerate = async () => {
     if (!aiPrompt.trim() || aiGenerating) return;
-    modelingStore.startGenerate(aiPrompt, aiLlm, aiBaseModel?.name, aiEngine);
+    modelingStore.startGenerate(aiPrompt, aiLlm, aiBaseModel?.name, aiStyle);
   };
 
   const handleOptimize = async () => {
@@ -281,6 +301,38 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
                     </div>
                     <div className="model-preview-filename">{preview.filename}</div>
                   </div>
+                  <div className="model-preview-actions" style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {!showActionInput ? (
+                      <button 
+                        className="model-action-btn" 
+                        style={{ background: 'var(--accent-color)', color: 'white', border: 'none', padding: '8px 12px', borderRadius: 6, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontWeight: 600 }}
+                        onClick={() => setShowActionInput(true)}
+                      >
+                        <IconSparkles /> 让它动起来
+                      </button>
+                    ) : (
+                      <div className="model-action-input-group" style={{ display: 'flex', flexDirection: 'column', gap: 8, background: 'var(--bg-secondary)', padding: 12, borderRadius: 8, border: '1px solid var(--border-color)' }}>
+                        <textarea 
+                          placeholder="描述它要做什么... (例如: 在森林里奔跑)" 
+                          value={actionPrompt}
+                          onChange={e => setActionPrompt(e.target.value)}
+                          style={{ width: '100%', background: 'transparent', border: 'none', color: 'inherit', resize: 'none', fontSize: 13, outline: 'none' }}
+                          rows={3}
+                          autoFocus
+                        />
+                        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                          <button onClick={() => setShowActionInput(false)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 12 }}>取消</button>
+                          <button 
+                            disabled={!actionPrompt.trim() || isStartingVideo}
+                            onClick={handleStartActionVideo}
+                            style={{ background: 'var(--accent-color)', color: 'white', border: 'none', padding: '4px 12px', borderRadius: 4, cursor: 'pointer', fontSize: 12, opacity: (!actionPrompt.trim() || isStartingVideo) ? 0.5 : 1 }}
+                          >
+                            {isStartingVideo ? '启动中...' : '开始定制视频'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </>
               ) : (
                 <div className="ai-placeholder">
@@ -331,16 +383,15 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
                 ))}
               </div>
 
-              <div className="ai-section-label">②.5 选择建模引擎</div>
+              <div className="ai-section-label">②.5 选择建模风格</div>
               <div className="ai-llm-selector">
                 {[
-                  { id: 'procedural', label: '快速草模', desc: '程序化拼装 · 稳定兜底' },
-                  { id: 'open3d', label: '开源高精', desc: 'Hunyuan3D/本地服务' },
-                  { id: 'auto', label: '自动', desc: '优先高精 · 失败回退' },
-                ].map(engine => (
-                  <button key={engine.id} className={`ai-llm-btn ${aiEngine === engine.id ? 'active' : ''}`} onClick={() => setAiEngine(engine.id)}>
-                    <span className="ai-llm-name">{engine.label}</span>
-                    <span className="ai-llm-desc">{engine.desc}</span>
+                  { id: 'realistic', label: '🔮 写实风格', desc: '程序化 / 高精模型' },
+                  { id: 'minecraft', label: '🟫 我的世界', desc: 'AI 体素拼装 · 极速' },
+                ].map(s => (
+                  <button key={s.id} className={`ai-llm-btn ${aiStyle === s.id ? 'active' : ''}`} onClick={() => setAiStyle(s.id)}>
+                    <span className="ai-llm-name">{s.label}</span>
+                    <span className="ai-llm-desc">{s.desc}</span>
                   </button>
                 ))}
               </div>
