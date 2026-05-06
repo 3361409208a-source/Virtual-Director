@@ -23,23 +23,31 @@ _SCENE_SYSTEM = (
     "- 【空间层次】：前景细节物 → 中景主体 → 远景背景，形成纵深感\n"
     "- 【故事密度】：每个物体都有存在的理由，共同讲述一个场景故事\n"
     "\n═══ [输出要求] ═══\n"
-    "- 规划 5-12 个独立物体，覆盖结构、道具、植被等类别\n"
+    "- 规划 4-6 个独立物体（不要超过 6 个），覆盖结构、道具、植被等类别\n"
     "- 为每个物体提供精准的英文建模提示词（model_prompt），要具体描述材质/颜色/风格\n"
     "- 设计合理的空间坐标，让场景有层次感\n"
     "- 每个物体都要独特，避免重复\n"
     "开始你的场景构想："
 )
 
+# 场景物体专用精简提示：零件数 ≤15，确保 JSON 短小精悍不出解析错误
 _OBJ_SYSTEM = (
-    "你是超现实数字生命架构师，正在为一个大型场景生成单个物体模型。\n"
-    "该物体将被放置在一个完整场景中，必须与周边环境风格一致。\n"
-    "要求：30-50 个零件，材质精细，可以加入奇异的发光或透明元素。\n"
-    "直接输出 JSON，不要解释。"
+    "你是高效的 3D 场景物体建模师。\n"
+    "要求：\n"
+    "- 零件数量：8-15 个（严格限制，不得超过 15）\n"
+    "- 每个零件用基础形状（box/sphere/cylinder）组合表达\n"
+    "- 材质简洁但有辨识度（metallic/roughness/emissive）\n"
+    "- 直接输出 JSON，不要任何解释或 markdown。"
 )
+
+# 强制为每个物体使用的快速模型（与用户的场景规划模型解耦）
+_FAST_OBJ_MODEL = "GLM-4.7-Flash"
 
 
 def _build_object_glb(obj: dict, llm_model: str, progress_cb=None) -> dict | None:
-    """为单个场景物体生成 GLB 文件，返回物体信息+文件路径。"""
+    """为单个场景物体生成 GLB 文件，返回物体信息+文件路径。
+    强制使用快速模型；失败后用更精简 prompt 自动重试一次。
+    """
     obj_id = obj.get("id", "unknown")
     prompt = obj.get("model_prompt", obj.get("name", ""))
     name = obj.get("name", obj_id)
@@ -47,37 +55,47 @@ def _build_object_glb(obj: dict, llm_model: str, progress_cb=None) -> dict | Non
     if progress_cb:
         progress_cb(f"🔧 [{name}] 正在建模...")
 
-    try:
-        set_model(llm_model)
-        result = llm_call(_OBJ_SYSTEM, prompt, ai_model_tool)
-        parts = result.get("parts", [])
-        if not parts:
+    # 总是用快速模型生成单个物体，节省时间
+    set_model(_FAST_OBJ_MODEL)
+
+    for attempt in range(2):
+        try:
+            cur_prompt = prompt if attempt == 0 else f"{prompt} (simple version, max 8 parts)"
+            result = llm_call(_OBJ_SYSTEM, cur_prompt, ai_model_tool)
+            parts = result.get("parts", [])
+            if not parts:
+                if attempt == 0:
+                    continue  # retry
+                if progress_cb:
+                    progress_cb(f"⚠️ [{name}] 未返回零件数据，跳过")
+                return None
+
+            glb_bytes = build_glb(parts)
+            safe_id = re.sub(r"[^\w\-]", "_", obj_id)
+            filename = f"scene_{safe_id}.glb"
+            os.makedirs(CUSTOM_DIR, exist_ok=True)
+            dest = os.path.join(CUSTOM_DIR, filename)
+            with open(dest, "wb") as f:
+                f.write(glb_bytes)
+
             if progress_cb:
-                progress_cb(f"⚠️ [{name}] LLM 未返回零件数据，跳过")
-            return None
+                progress_cb(f"✅ [{name}] GLB 完成 ({len(glb_bytes)//1024} KB, {len(parts)} 零件)")
 
-        glb_bytes = build_glb(parts)
-        safe_id = re.sub(r"[^\w\-]", "_", obj_id)
-        filename = f"scene_{safe_id}.glb"
-        os.makedirs(CUSTOM_DIR, exist_ok=True)
-        dest = os.path.join(CUSTOM_DIR, filename)
-        with open(dest, "wb") as f:
-            f.write(glb_bytes)
-
-        if progress_cb:
-            progress_cb(f"✅ [{name}] GLB 生成完成 ({len(glb_bytes)//1024} KB, {len(parts)} 零件)")
-
-        return {
-            **obj,
-            "filename": filename,
-            "url": f"/api/models/custom/{filename}",
-            "parts_count": len(parts),
-            "size_kb": len(glb_bytes) // 1024,
-        }
-    except Exception as e:
-        if progress_cb:
-            progress_cb(f"❌ [{name}] 生成失败: {e}")
-        return None
+            return {
+                **obj,
+                "filename": filename,
+                "url": f"/api/models/custom/{filename}",
+                "parts_count": len(parts),
+                "size_kb": len(glb_bytes) // 1024,
+            }
+        except Exception as e:
+            if attempt == 0:
+                if progress_cb:
+                    progress_cb(f"⚠️ [{name}] 首次失败，重试中...")
+            else:
+                if progress_cb:
+                    progress_cb(f"❌ [{name}] 生成失败: {e}")
+    return None
 
 
 async def generate_scene(
@@ -130,7 +148,7 @@ async def generate_scene(
     _cb(f"⚙️ 开始并行生成 {len(objects_plan)} 个模型...")
 
     results = []
-    max_workers = min(len(objects_plan), 4)
+    max_workers = min(len(objects_plan), 6)
 
     def _task(obj):
         return _build_object_glb(obj, llm_model, progress_cb=_cb)

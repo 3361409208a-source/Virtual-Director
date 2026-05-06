@@ -33,3 +33,14 @@ godot/assets/custom/*
 # OS
 .DS_Store
 Thumbs.db
+
+# Large model weight files (DO NOT commit)
+shap_e_model_cache/
+*.bin
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.gguf
+*.onnx
+**/*model_cache*/
