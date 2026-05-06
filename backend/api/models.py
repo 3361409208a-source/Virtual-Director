@@ -12,6 +12,7 @@ from backend.tools.definitions import ai_model_tool
 from backend.services.glb_builder import build_glb
 from backend.services.asset_generator import get_system_prompt
 from backend.services.voxel_generator import generate_voxel_asset
+from backend.services.scene_generator import generate_scene
 
 router = APIRouter()
 
@@ -93,7 +94,7 @@ class AIGenerateRequest(BaseModel):
     prompt: str
     model: str = "astron-code-latest"
     base_model: str = ""   # optional reference model name
-    style: str = "realistic"   # realistic | minecraft
+    style: str = "realistic"   # realistic | minecraft | scene
 
 def _sse(obj: dict) -> str:
     return f"data: {json.dumps(obj, ensure_ascii=False)}\n\n"
@@ -116,6 +117,70 @@ async def ai_generate_model(req: AIGenerateRequest):
     async def stream():
         try:
             yield _sse({"step": "start", "msg": "🤖 AI 开始分析建模方案..."})
+
+            # ── Scene Mode ──────────────────────────────────────────────────────
+            if req.style == "scene":
+                yield _sse({"step": "building", "msg": "🌍 启动场景建模引擎..."})
+                scene_q: asyncio.Queue = asyncio.Queue()
+
+                def _scene_token_cb(tok: str):
+                    asyncio.run_coroutine_threadsafe(scene_q.put({"type": "content", "msg": tok}), loop)
+
+                def _scene_thinking_cb(tok: str):
+                    asyncio.run_coroutine_threadsafe(scene_q.put({"type": "thinking", "msg": tok}), loop)
+
+                def _scene_progress_cb(msg: str):
+                    asyncio.run_coroutine_threadsafe(scene_q.put({"type": "progress", "msg": msg}), loop)
+
+                scene_result: dict = {}
+                scene_err: dict = {}
+
+                async def _run_scene():
+                    try:
+                        scene_result["r"] = await generate_scene(
+                            req.prompt,
+                            llm_model=req.model,
+                            token_cb=_scene_token_cb,
+                            thinking_cb=_scene_thinking_cb,
+                            progress_cb=_scene_progress_cb,
+                        )
+                    except Exception as e:
+                        scene_err["e"] = e
+                    finally:
+                        await scene_q.put(None)
+
+                import asyncio as _asyncio
+                scene_task = _asyncio.create_task(_run_scene())
+
+                while True:
+                    tok = await scene_q.get()
+                    if tok is None:
+                        break
+                    if tok["type"] == "thinking":
+                        yield _sse({"step": "thinking", "msg": tok["msg"]})
+                    elif tok["type"] == "content":
+                        yield _sse({"step": "token", "msg": tok["msg"]})
+                    else:
+                        yield _sse({"step": "building", "msg": tok["msg"]})
+
+                await scene_task
+
+                if "e" in scene_err:
+                    yield _sse({"step": "error", "msg": f"场景建模失败: {scene_err['e']}"})
+                    return
+
+                sr = scene_result.get("r", {})
+                yield _sse({
+                    "step":             "scene_done",
+                    "msg":              f"✅ 场景生成完成：{sr.get('scene_name')} ({sr.get('success_count')}/{sr.get('total_objects')} 个物体)",
+                    "scene_name":       sr.get("scene_name"),
+                    "scene_description":sr.get("scene_description"),
+                    "objects":          sr.get("objects", []),
+                    "success_count":    sr.get("success_count", 0),
+                    "total_objects":    sr.get("total_objects", 0),
+                    "tokens":           get_token_usage(),
+                })
+                return
 
             if req.style == "minecraft":
                 yield _sse({"step": "building", "msg": "🟫 正在启动我的世界体素引擎..."})

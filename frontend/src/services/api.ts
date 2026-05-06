@@ -70,8 +70,21 @@ export interface AIGenerateResult {
   parts: object[];
 }
 
+export interface SceneObject {
+  id: string;
+  name: string;
+  filename: string;
+  url: string;
+  parts_count: number;
+  size_kb: number;
+  position: number[];
+  rotation_y?: number;
+  scale: number;
+  category: string;
+}
+
 export interface AIModelEvent {
-  step: 'start' | 'token' | 'thinking' | 'building' | 'done' | 'error';
+  step: 'start' | 'token' | 'thinking' | 'building' | 'done' | 'scene_done' | 'error';
   msg: string;
   filename?: string;
   model_name?: string;
@@ -79,10 +92,13 @@ export interface AIModelEvent {
   parts_count?: number;
   size_kb?: number;
   url?: string;
-  tokens?: {
-    input: number;
-    output: number;
-  };
+  tokens?: { input: number; output: number; };
+  // scene_done specific
+  scene_name?: string;
+  scene_description?: string;
+  objects?: SceneObject[];
+  success_count?: number;
+  total_objects?: number;
 }
 
 export async function streamAiGenerateModel(

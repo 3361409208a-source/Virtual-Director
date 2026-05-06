@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import type { ModelMeta } from '../services/api';
 import { listModels, uploadModel, deleteCustomModel, optimizePrompt } from '../services/api';
 import { ThreeModelPreview } from './ThreeModelPreview';
+import { SceneWalker } from './SceneWalker';
 import { modelingStore } from '../services/modelingStore';
 
 import { IconSparkles, IconBox, IconTrash, IconChevronDown, IconChevronUp, IconPlus, IconUpload, IconTerminal, IconClose, IconError, IconEye, IconMagic } from './Icons';
@@ -39,6 +40,7 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
   const [previewPreset] = useState<any>('studio');
   const [isOptimizing, setIsOptimizing] = useState(false);
 
+  const [showWalker, setShowWalker] = useState(false);
   const [showActionInput, setShowActionInput] = useState(false);
   const [actionPrompt, setActionPrompt] = useState('');
   const [isStartingVideo, setIsStartingVideo] = useState(false);
@@ -59,7 +61,7 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
   }, []);
 
   const [refining, setRefining] = useState(false);
-  const { isGenerating: aiGenerating, logs: aiLog, result: aiResult, error: aiError, prompt: aiPrompt, llm: aiLlm, style: aiStyle, tokens: aiTokens } = mState;
+  const { isGenerating: aiGenerating, logs: aiLog, result: aiResult, sceneResult, error: aiError, prompt: aiPrompt, llm: aiLlm, style: aiStyle, tokens: aiTokens } = mState;
   const setAiPrompt = (p: string) => modelingStore.setPrompt(p);
   const setAiLlm = (l: string) => modelingStore.setLlm(l);
   const setAiStyle = (style: string) => modelingStore.setStyle(style);
@@ -388,6 +390,7 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
                 {[
                   { id: 'realistic', label: '🔮 写实风格', desc: '程序化 / 高精模型' },
                   { id: 'minecraft', label: '🟫 我的世界', desc: 'AI 体素拼装 · 极速' },
+                  { id: 'scene',     label: '🏙️ 场景建模', desc: '多物体 · 整体搭建' },
                 ].map(s => (
                   <button key={s.id} className={`ai-llm-btn ${aiStyle === s.id ? 'active' : ''}`} onClick={() => setAiStyle(s.id)}>
                     <span className="ai-llm-name">{s.label}</span>
@@ -395,6 +398,12 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
                   </button>
                 ))}
               </div>
+              {aiStyle === 'scene' && (
+                <div style={{ background: 'rgba(56,139,253,0.08)', border: '1px solid rgba(56,139,253,0.25)', borderRadius: 8, padding: '8px 12px', fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                  💡 <b>场景建模</b>：AI 会先规划整个场景的空间布局，再为每个物体并行生成独立 GLB 模型。<br />
+                  例如：<i>「一个赛博朋克街头夜市，有摊位、霓虹灯牌、行人和路灯」</i>
+                </div>
+              )}
 
               <div className="ai-section-label">③ 描述你的建模需求</div>
               <div className="ai-input-wrapper" style={{ position: 'relative' }}>
@@ -468,6 +477,52 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
                     </div>
                   )}
                 </div>
+              ) : sceneResult ? (
+                <div style={{ padding: 12, overflowY: 'auto', flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent)', marginBottom: 4 }}>
+                    🏙️ {sceneResult.scene_name}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 10 }}>
+                    {sceneResult.scene_description}
+                    <span style={{ marginLeft: 8, color: 'var(--accent)', opacity: 0.8 }}>
+                      {sceneResult.success_count}/{sceneResult.total_objects} 个物体
+                    </span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px,1fr))', gap: 8 }}>
+                    {sceneResult.objects.map((obj, i) => (
+                      <div key={i} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: 8, padding: 8, cursor: 'pointer' }}
+                        onClick={() => setPreview({ id: `custom/${obj.filename}`, category: 'custom', filename: obj.filename, name: obj.name, size_kb: obj.size_kb, url: obj.url })}>
+                        <div style={{ fontSize: 18, textAlign: 'center', marginBottom: 4 }}>
+                          {obj.category === 'structure' ? '🏗️' : obj.category === 'vegetation' ? '🌳' : obj.category === 'character' ? '🧍' : obj.category === 'vehicle' ? '🚗' : obj.category === 'light' ? '💡' : '📦'}
+                        </div>
+                        <div style={{ fontSize: 10, fontWeight: 600, textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{obj.name}</div>
+                        <div style={{ fontSize: 9, color: 'var(--text-secondary)', textAlign: 'center' }}>{obj.parts_count} 零件 · {obj.size_kb}KB</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                    <button
+                      onClick={() => setShowWalker(true)}
+                      style={{
+                        flex: 1, padding: '8px 0', borderRadius: 8, border: 'none', cursor: 'pointer',
+                        background: 'linear-gradient(135deg, #1f6feb, #388bfd)',
+                        color: '#fff', fontWeight: 700, fontSize: 13,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                      }}
+                    >
+                      🎮 进入场景漫游
+                    </button>
+                    <button className="ai-save-btn" style={{ flex: 0.4 }} onClick={() => load()}>
+                      <IconUpload /> 刷新库
+                    </button>
+                  </div>
+                </div>
+              ) : aiGenerating && aiStyle === 'scene' ? (
+                <div className="ai-placeholder">
+                  <div style={{ fontSize: 24, marginBottom: 8 }}>🌍</div>
+                  <div style={{ fontWeight: 600 }}>场景建模进行中...</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>AI 正在为每个物体并行生成 GLB</div>
+                </div>
               ) : (
                 <div className="ai-placeholder">
                   <div className="ai-placeholder-icon"><IconBox /></div>
@@ -490,10 +545,30 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
                   </button>
                 </div>
                 <div className="ai-log-body">
-                  {/* 💭 思考过程保留，但过滤掉原始 JSON 数据，代之以结构化展示 */}
-                  {aiLog.filter(line => !line.includes('"shape"') && !line.includes('shape:')).map((line, i) => (
-                    <div key={i} className={`ai-log-line ${line.startsWith('💭') ? 'thinking' : ''}`}>{line}</div>
-                  ))}
+                  {/* 💭 思考过程与文字说明保留，精准剔除大规模 JSON 块 */}
+                  {aiLog.map((line, i) => {
+                    // 如果是思维链，保留
+                    if (line.startsWith('💭')) return <div key={i} className="ai-log-line thinking">{line}</div>;
+                    
+                    // 如果是 Token 输出，尝试清理其中的 JSON 块
+                    if (line.startsWith('📝')) {
+                      // 移除所有可能是零件 JSON 的部分，保留文字
+                      // 匹配 {} 块，尤其是包含 shape 的块
+                      let cleanLine = line.replace(/\{[^{}]*"shape"[^{}]*\}/g, ' [零件数据...] ');
+                      cleanLine = cleanLine.replace(/\{[^{}]*"type"[^{}]*\}/g, ' [零件数据...] ');
+                      
+                      // 如果清理后只剩下前缀或太短且包含 JSON 关键字符，则隐藏
+                      if (cleanLine.length < 10 && (cleanLine.includes('{') || cleanLine.includes('"'))) return null;
+                      
+                      // 再次过滤掉明显的 JSON 行
+                      if (cleanLine.includes('"parts":') || cleanLine.includes('"model_name":')) return null;
+
+                      return <div key={i} className="ai-log-line">{cleanLine}</div>;
+                    }
+                    
+                    // 其他状态消息（start, building 等），保留
+                    return <div key={i} className="ai-log-line">{line}</div>;
+                  }).filter(Boolean)}
                   
                   {/* 🛠️ 结构化零件清单 (类似 C4D 对象管理器) */}
                   {mState.parts.length > 0 && (
@@ -566,6 +641,14 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
             </div>
           </div>
         </div>
+      )}
+
+      {showWalker && sceneResult && (
+        <SceneWalker
+          objects={sceneResult.objects}
+          sceneName={sceneResult.scene_name}
+          onClose={() => setShowWalker(false)}
+        />
       )}
     </>
   );

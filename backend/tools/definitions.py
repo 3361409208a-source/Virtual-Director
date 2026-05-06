@@ -468,3 +468,68 @@ ai_model_tool: dict = {
         }
     }
 }
+
+# ── Scene Layout Tool ────────────────────────────────────────────────────────────
+# Used for scene modeling mode: plans a multi-object 3D scene.
+
+scene_layout_tool: dict = {
+    "type": "function",
+    "function": {
+        "name": "design_scene_layout",
+        "description": "规划一个完整的 3D 场景，包含多个独立物体及其空间位置、外观描述，用于批量生成场景模型。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "scene_name": {
+                    "type": "string",
+                    "description": "场景名称，英文下划线，如 night_market_alley"
+                },
+                "scene_description": {
+                    "type": "string",
+                    "description": "场景整体氛围、风格和故事背景的中文描述"
+                },
+                "objects": {
+                    "type": "array",
+                    "description": "场景中所有独立物体的列表（5-15 个），每个物体将单独生成 GLB 模型",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "type": "string",
+                                "description": "物体唯一ID，英文，如 market_stall_01"
+                            },
+                            "name": {
+                                "type": "string",
+                                "description": "物体中文名称，如 '夜市摊位'"
+                            },
+                            "model_prompt": {
+                                "type": "string",
+                                "description": "用于 AI 3D 建模的详细外观描述（英文），包含材质、颜色、造型细节"
+                            },
+                            "position": {
+                                "type": "array",
+                                "items": {"type": "number"},
+                                "description": "[x, y, z] 世界坐标（单位：米），y 轴朝上"
+                            },
+                            "rotation_y": {
+                                "type": "number",
+                                "description": "绕 Y 轴旋转角度（度），0-360"
+                            },
+                            "scale": {
+                                "type": "number",
+                                "description": "统一缩放比例，1.0 为标准大小"
+                            },
+                            "category": {
+                                "type": "string",
+                                "enum": ["structure", "prop", "vegetation", "character", "vehicle", "light"],
+                                "description": "物体类别"
+                            }
+                        },
+                        "required": ["id", "name", "model_prompt", "position", "scale", "category"]
+                    }
+                }
+            },
+            "required": ["scene_name", "scene_description", "objects"]
+        }
+    }
+}

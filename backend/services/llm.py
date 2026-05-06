@@ -1,4 +1,6 @@
 import json
+import os
+import re
 from contextvars import ContextVar
 from openai import OpenAI
 import anthropic as _anthropic_mod
@@ -7,7 +9,6 @@ from backend.config import (
     GLM_API_KEY, GLM_BASE_URL, GLM_MODEL,
     ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL
 )
-
 
 # Providers and models
 AVAILABLE_MODELS = [
@@ -22,8 +23,6 @@ _model_var: ContextVar[str] = ContextVar("deepseek_model", default="deepseek-v4-
 
 # Token usage storage for current request
 _token_usage_var: ContextVar[dict] = ContextVar("token_usage", default={"input": 0, "output": 0})
-
-
 
 # Cache for LLM clients to reuse connection pools
 _client_cache = {}
@@ -67,246 +66,121 @@ def _get_client_config(selection: str):
 
     return None, None
 
-
 def set_model(model: str) -> None:
-    """Set the model for the current request context."""
     if model in AVAILABLE_MODELS:
         _model_var.set(model)
-
 
 def get_model() -> str:
     return _model_var.get()
 
-
 def get_token_usage() -> dict:
-    """Get the token usage for the current request."""
     return _token_usage_var.get().copy()
 
-
 def set_token_usage(input_tokens: int, output_tokens: int) -> None:
-    """Set the token usage for the current request."""
     _token_usage_var.set({"input": input_tokens, "output": output_tokens})
 
-
 def _repair_json(s: str) -> str:
-    """Attempt to fix common LLM JSON errors like missing or extra closing brackets or unquoted values."""
     s = s.strip()
-    if not s:
-        return s
+    if not s: return s
     
-    # 1. Handle unquoted string values (common with some models)
-    # This regex looks for values after a colon that aren't quoted, aren't numbers, and aren't objects/arrays.
-    import re
-    # Match: ": <content>" where <content> doesn't start with " or [ or { or a number, and ends before , or }
-    # We use a non-greedy match and lookahead for , or }
     def quote_val(match):
         val = match.group(1).strip()
-        if val.lower() in ["true", "false", "null"]:
-            return f': {val}'
-        # If it's already quoted, don't double quote
-        if val.startswith('"') and val.endswith('"'):
-            return f': {val}'
-        # If it looks like a number, don't quote
+        if val.lower() in ["true", "false", "null"]: return f': {val}'
+        if val.startswith('"') and val.endswith('"'): return f': {val}'
         try:
             float(val)
             return f': {val}'
-        except ValueError:
-            pass
-        # Escape existing quotes inside the new string and wrap in quotes
+        except ValueError: pass
         safe_val = val.replace('"', '\\"')
         return f': "{safe_val}"'
 
     s = re.sub(r':\s*([^"\[\{\d\-][^,\}]*)', quote_val, s)
 
-    # 2. Basic balancing: count { vs } and [ vs ]
     stack = []
     fixed_s = ""
     in_string = False
     escaped = False
-    
-    for i, char in enumerate(s):
-        if char == '"' and not escaped:
-            in_string = not in_string
-        
+    for char in s:
+        if char == '"' and not escaped: in_string = not in_string
         if not in_string:
-            if char == '{' or char == '[':
-                stack.append('}' if char == '{' else ']')
+            if char == '{' or char == '[': stack.append('}' if char == '{' else ']')
             elif char == '}' or char == ']':
-                if stack and stack[-1] == char:
-                    stack.pop()
-                else:
-                    continue
-        
+                if stack and stack[-1] == char: stack.pop()
+                else: continue
         fixed_s += char
-        if char == '\\' and not escaped:
-            escaped = True
-        else:
-            escaped = False
+        escaped = (char == '\\' and not escaped)
     
-    # Add missing closings
-    while stack:
-        fixed_s += stack.pop()
-    
+    while stack: fixed_s += stack.pop()
     return fixed_s
 
-
-
 def _extract_json(s: str) -> dict:
-    """Robustly extract and repair JSON from a string."""
     s = s.strip()
-    
-    # Strip <think>...</think> blocks from reasoning models
-    import re
     s = re.sub(r'<think>.*?</think>', '', s, flags=re.DOTALL).strip()
-    
-    # Strip markdown formatting
     s = re.sub(r'^```json\s*', '', s, flags=re.MULTILINE)
     s = re.sub(r'^```\s*', '', s, flags=re.MULTILINE)
     s = re.sub(r'\s*```$', '', s, flags=re.MULTILINE)
     s = s.strip()
 
-    # 1. Try direct parse
-
-    try:
-        return json.loads(s)
+    try: return json.loads(s)
     except json.JSONDecodeError as e:
-        # If the error is 'Extra data', try to truncate
         if "Extra data" in e.msg:
-            try:
-                return json.loads(s[:e.pos])
-            except Exception:
-                pass
-
-        # 2. Try to repair the string (handle mismatched brackets)
-        try:
-            repaired = _repair_json(s)
-            return json.loads(repaired)
-        except Exception:
-            pass
-
-        # 3. Try to find the first '{' and last '}'
-        start = s.find('{')
-        end = s.rfind('}')
+            try: return json.loads(s[:e.pos])
+            except: pass
+        try: return json.loads(_repair_json(s))
+        except: pass
+        
+        start, end = s.find('{'), s.rfind('}')
         if start != -1 and end != -1 and end > start:
             candidate = s[start:end+1]
-            try:
-                return json.loads(candidate)
-            except json.JSONDecodeError as e2:
-                if "Extra data" in e2.msg:
-                    try:
-                        return json.loads(candidate[:e2.pos])
-                    except Exception:
-                        pass
-                
-                # Try repairing the candidate
-                try:
-                    return json.loads(_repair_json(candidate))
-                except Exception:
-                    pass
-
-        # Re-raise the original error if we couldn't recover
+            try: return json.loads(candidate)
+            except:
+                try: return json.loads(_repair_json(candidate))
+                except: pass
         raise e
 
-
-
-
-def _llm_call_anthropic(
-    client, model: str, system: str, user: str, tool: dict,
-    token_cb=None, thinking_cb=None,
-) -> dict:
-    """LLM call via Anthropic SDK (messages API with tool_use)."""
-    # Convert OpenAI-style tool definition to Anthropic format
+def _llm_call_anthropic(client, model: str, system: str, user: str, tool: dict, token_cb=None, thinking_cb=None) -> dict:
     func_info = tool["function"]
     tool_name = func_info["name"]
-    tool_schema = func_info.get("parameters", {})
     anthropic_tool = {
         "name": tool_name,
         "description": func_info.get("description", ""),
-        "input_schema": tool_schema,
+        "input_schema": func_info.get("parameters", {}),
     }
-
-    # Anthropic uses system as a top-level param, not in messages
     messages = [{"role": "user", "content": user}]
-
     retries = 2
     last_error = None
 
     for attempt in range(retries + 1):
         try:
-            args_str = ""
-            input_tokens = 0
-            output_tokens = 0
+            args_str, in_tokens, out_tokens = "", 0, 0
             with client.messages.stream(
-                model=model,
-                max_tokens=4096,
-                system=system,
-                messages=messages,
-                tools=[anthropic_tool],
-                tool_choice={"type": "tool", "name": tool_name},
+                model=model, max_tokens=4096, system=system, messages=messages,
+                tools=[anthropic_tool], tool_choice={"type": "tool", "name": tool_name},
             ) as stream:
                 for event in stream:
                     if event.type == "content_block_delta":
                         if event.delta.type == "text_delta":
                             frag = event.delta.text
                             args_str += frag
-                            if token_cb:
-                                try: token_cb(frag)
-                                except Exception: pass
+                            if token_cb: token_cb(frag)
                         elif event.delta.type == "input_json_delta":
                             frag = event.delta.partial_json
                             args_str += frag
-                            if token_cb:
-                                try: token_cb(frag)
-                                except Exception: pass
+                            if token_cb: token_cb(frag)
                         elif event.delta.type == "thinking_delta":
-                            frag = event.delta.thinking
-                            if thinking_cb:
-                                try: thinking_cb(frag)
-                                except Exception: pass
-                    elif event.type == "message_start":
-                        input_tokens = event.message.usage.input_tokens
-                        output_tokens = event.message.usage.output_tokens
-                    elif event.type == "message_delta":
-                        output_tokens = event.usage.output_tokens
+                            if thinking_cb: thinking_cb(event.delta.thinking)
+                    elif event.type == "message_start": in_tokens = event.message.usage.input_tokens
+                    elif event.type == "message_delta": out_tokens = event.usage.output_tokens
 
-            # Store token info in a global-like variable for retrieval
-            if not hasattr(_llm_call_anthropic, '_last_tokens'):
-                _llm_call_anthropic._last_tokens = {}
-            _llm_call_anthropic._last_tokens['input'] = input_tokens
-            _llm_call_anthropic._last_tokens['output'] = output_tokens
-
-            if not args_str:
-                raise RuntimeError("Anthropic LLM did not return content.")
-
-            try:
-                parsed = _extract_json(args_str)
-                func_name = tool["function"]["name"]
-                if isinstance(parsed, dict):
-                    if len(parsed) == 1 and func_name in parsed and isinstance(parsed[func_name], dict):
-                        parsed = parsed[func_name]
-                    elif len(parsed) == 1 and "parameters" in parsed and isinstance(parsed["parameters"], dict):
-                        parsed = parsed["parameters"]
-                if not isinstance(parsed, dict):
-                    raise ValueError(f"Expected JSON object, got {type(parsed).__name__}: {args_str[:120]}")
-                return parsed
-            except Exception as e:
-                print(f"Attempt {attempt + 1} failed to parse JSON: {args_str[:200]}...")
-                last_error = e
-                messages.append({"role": "assistant", "content": args_str})
-                messages.append({
-                    "role": "user",
-                    "content": f"Validation failed: {str(e)}. Please correct your JSON formatting and try again. Output ONLY raw JSON.",
-                })
-                continue
+            set_token_usage(in_tokens, out_tokens)
+            parsed = _extract_json(args_str)
+            if isinstance(parsed, dict) and tool_name in parsed: parsed = parsed[tool_name]
+            return parsed
         except Exception as e:
-            if attempt == retries:
-                raise e
-            print(f"Attempt {attempt + 1} failed: {str(e)}")
             last_error = e
-            continue
-
-    raise last_error or RuntimeError("Anthropic LLM call failed after retries")
-
+            messages.append({"role": "assistant", "content": args_str})
+            messages.append({"role": "user", "content": f"Fix JSON: {e}"})
+    raise last_error
 
 def llm_call(system: str, user: str, tool: dict, token_cb=None, thinking_cb=None, model_override: str = None) -> dict:
     """Single LLM call that enforces a specific function tool and returns parsed args.
@@ -326,31 +200,24 @@ def llm_call(system: str, user: str, tool: dict, token_cb=None, thinking_cb=None
         return _llm_call_anthropic(client, model, system, user, tool, token_cb, thinking_cb)
 
     # ── OpenAI-compatible path ──────────────────────────────────────────────
-    # DeepSeek V4 API currently returns 400 errors for strict tool_choice on both flash and pro models.
-    # We will use Prompt Engineering (JSON mode) for them.
-    supports_tools = selection not in ["deepseek-reasoner", "deepseek-v4-pro", "deepseek-v4-flash", "astron-code-latest", "Kimi-K2.6"]
+    # DeepSeek models and Astron often have issues with tool_choice streaming or strictness.
+    # We use JSON mode (Prompt Engineering) for better streaming visibility.
+    supports_tools = selection not in [
+        "deepseek-chat", "deepseek-reasoner", "deepseek-v4-pro", 
+        "deepseek-v4-flash", "astron-code-latest", "Kimi-K2.6"
+    ]
 
-    messages = [
+    msgs = [
         {"role": "system", "content": system},
         {"role": "user",   "content": user},
     ]
 
-    if selection == "astron-code-latest":
-        # For Astron, we use JSON mode with a very strict instruction
+    if not supports_tools:
         schema_str = json.dumps(tool["function"].get("parameters", {}), ensure_ascii=False)
-        messages[0]["content"] += (
-            f"\n\n[CRITICAL: 3D MODELING PROTOCOL]\n"
-            f"You MUST output a detailed 3D model with at least 15-25 parts.\n"
-            f"You MUST output ONLY valid JSON matching this schema:\n{schema_str}\n"
-            f"Do NOT include explanations, markdown blocks, or any other text. Start directly with '{{'."
-        )
-    elif not supports_tools:
-        schema_str = json.dumps(tool["function"].get("parameters", {}), ensure_ascii=False)
-        messages[0]["content"] += (
-            f"\n\n[CRITICAL INSTRUCTION]\n"
-            f"You MUST output ONLY valid JSON. The JSON must exactly match this JSON Schema:\n{schema_str}\n"
-            f"Do NOT wrap the output in a 'parameters' or '{tool['function']['name']}' key. Return the raw properties object directly.\n"
-            f"Do NOT include Markdown blocks (e.g. ```json), explanations, or any other text."
+        msgs[0]["content"] += (
+            f"\n\n[重要指令]\n"
+            f"你必须输出且仅输出符合以下 JSON Schema 的原始 JSON 对象：\n{schema_str}\n"
+            f"不要包含任何 Markdown 代码块（如 ```json）、解释文字或前缀。直接以 '{{' 开始输出。"
         )
 
     retries = 2
@@ -358,105 +225,79 @@ def llm_call(system: str, user: str, tool: dict, token_cb=None, thinking_cb=None
 
     for attempt in range(retries + 1):
         try:
+            args_str = ""
+            input_est = int(len(system + user) * 1.25)
+            
             if supports_tools:
                 resp = client.chat.completions.create(
                     model=model,
-                    messages=messages,
+                    messages=msgs,
                     tools=[tool],
                     tool_choice={"type": "function", "function": {"name": tool["function"]["name"]}},
                     stream=True,
                 )
-                args_str = ""
                 _tool_call_id = None
-                _tool_call_name = None
+                # Stream results
                 for chunk in resp:
-                    delta = chunk.choices[0].delta if chunk.choices else None
-                    if not delta:
-                        continue
+                    if not chunk.choices: continue
+                    delta = chunk.choices[0].delta
+                    
                     if delta.tool_calls:
                         tc = delta.tool_calls[0]
-                        if tc.id:
-                            _tool_call_id = tc.id
-                        if tc.function.name:
-                            _tool_call_name = tc.function.name
                         frag = tc.function.arguments or ""
                         if frag:
                             args_str += frag
                             if token_cb:
-                                try:
-                                    token_cb(frag)
-                                except Exception:
-                                    pass
+                                try: token_cb(frag)
+                                except: pass
                     elif delta.content:
                         args_str += delta.content
                         if token_cb:
-                            try:
-                                token_cb(delta.content)
-                            except Exception:
-                                pass
-
-                # Token usage is not directly available on the stream object in this version of the SDK 
-                # unless stream_options={"include_usage": True} is used.
-                # Removing for now to fix the 'Stream' object has no attribute 'usage' crash.
-
+                            try: token_cb(delta.content)
+                            except: pass
                 if not args_str:
                     raise RuntimeError("LLM did not return a tool call or content.")
             else:
                 stream = client.chat.completions.create(
                     model=model,
-                    messages=messages,
+                    messages=msgs,
                     stream=True,
                 )
-                args_str = ""
                 in_thinking = False
-                thinking_buf = ""
-                content_buf = ""
                 for chunk in stream:
-                    delta = chunk.choices[0].delta if chunk.choices else None
-                    if not delta:
-                        continue
+                    if not chunk.choices: continue
+                    delta = chunk.choices[0].delta
                     
                     # Support for DeepSeek Reasoner's reasoning_content
                     reasoning = getattr(delta, 'reasoning_content', None)
                     if reasoning:
                         if thinking_cb:
                             try: thinking_cb(reasoning)
-                            except Exception: pass
+                            except: pass
                     
                     if delta.content:
                         text = delta.content
                         args_str += text
-                        # Detect <thinking> and </thinking> tags for some providers
+                        
                         if "<thinking>" in text:
                             in_thinking = True
-                            before = text.split("<thinking>")[0]
-                            if before and token_cb:
-                                try: token_cb(before)
-                                except Exception: pass
                             continue
                         if "</thinking>" in text:
                             in_thinking = False
-                            parts = text.split("</thinking>", 1)
-                            if parts[0] and thinking_cb:
-                                try: thinking_cb(parts[0])
-                                except Exception: pass
-                            if len(parts) > 1 and parts[1] and token_cb:
-                                try: token_cb(parts[1])
-                                except Exception: pass
                             continue
                         
                         if in_thinking:
                             if thinking_cb:
                                 try: thinking_cb(text)
-                                except Exception: pass
+                                except: pass
                         else:
                             if token_cb:
                                 try: token_cb(text)
-                                except Exception: pass
+                                except: pass
 
             try:
                 parsed = _extract_json(args_str)
-                # Defensive unwrapping: If the LLM wrapped the result in {"function_name": {...}} or {"parameters": {...}}
+                # Defensive unwrapping
                 func_name = tool["function"]["name"]
                 if isinstance(parsed, dict):
                     if len(parsed) == 1 and func_name in parsed and isinstance(parsed[func_name], dict):
@@ -464,27 +305,19 @@ def llm_call(system: str, user: str, tool: dict, token_cb=None, thinking_cb=None
                     elif len(parsed) == 1 and "parameters" in parsed and isinstance(parsed["parameters"], dict):
                         parsed = parsed["parameters"]
                 if not isinstance(parsed, dict):
-                    raise ValueError(f"Expected JSON object, got {type(parsed).__name__}: {args_str[:120]}")
+                    raise ValueError(f"Expected JSON object, got {type(parsed).__name__}")
+                
+                # Final token update
+                set_token_usage(input_est, int(len(args_str) * 1.25))
                 return parsed
             except Exception as e:
-
                 print(f"Attempt {attempt + 1} failed to parse JSON: {args_str[:200]}...")
                 last_error = e
-                # Add the error to conversation and retry
-                if supports_tools:
-                    tool_calls = resp.choices[0].message.tool_calls
-                    messages.append({"role": "assistant", "content": None, "tool_calls": tool_calls})
-                    messages.append({
-                        "role": "tool", 
-                        "tool_call_id": tool_calls[0].id,
-                        "content": f"JSON解析失败: {str(e)}。请确保所有字符串字段都用双引号括起来，并且JSON格式严格正确。"
-                    })
-                else:
-                    messages.append({"role": "assistant", "content": args_str})
-                    messages.append({
-                        "role": "user", 
-                        "content": f"Validation failed: {str(e)}. Please correct your JSON formatting and try again. Output ONLY raw JSON."
-                    })
+                msgs.append({"role": "assistant", "content": args_str})
+                msgs.append({
+                    "role": "user", 
+                    "content": f"Validation failed: {str(e)}. Please correct your JSON formatting and try again. Output ONLY the raw properties object as JSON."
+                })
                 continue
         except Exception as e:
             if attempt == retries:
@@ -494,44 +327,3 @@ def llm_call(system: str, user: str, tool: dict, token_cb=None, thinking_cb=None
             continue
             
     raise last_error or RuntimeError("LLM call failed after retries")
-
-
-def _llm_call_openai(client, model, system, user, tool, token_cb, thinking_cb):
-    """Internal helper for OpenAI-compatible tool calls with streaming."""
-    messages = [
-        {"role": "system", "content": system},
-        {"role": "user",   "content": user},
-    ]
-    
-    resp = client.chat.completions.create(
-        model=model,
-        messages=messages,
-        tools=[tool],
-        tool_choice={"type": "function", "function": {"name": tool["function"]["name"]}},
-        stream=True,
-    )
-    
-    args_str = ""
-    for chunk in resp:
-        delta = chunk.choices[0].delta if chunk.choices else None
-        if not delta:
-            continue
-        if delta.tool_calls:
-            frag = delta.tool_calls[0].function.arguments or ""
-            if frag:
-                args_str += frag
-                if token_cb:
-                    try: token_cb(frag)
-                    except: pass
-        elif delta.content:
-            args_str += delta.content
-            if token_cb:
-                try: token_cb(delta.content)
-                except: pass
-    
-    if not args_str:
-        raise RuntimeError("LLM did not return a tool call or content.")
-    return args_str
-
-
-

@@ -1,4 +1,4 @@
-import type { AIModelEvent, AIGenerateResult } from './api';
+import type { AIModelEvent, AIGenerateResult, SceneObject } from './api';
 import { streamAiGenerateModel } from './api';
 
 type Listener = (state: ModelingState) => void;
@@ -7,12 +7,13 @@ export interface ModelingState {
   isGenerating: boolean;
   logs: string[];
   result: AIGenerateResult | null;
+  sceneResult: { scene_name: string; scene_description: string; objects: SceneObject[]; success_count: number; total_objects: number } | null;
   error: string;
   prompt: string;
   llm: string;
   style: string;
   tokens?: { input: number; output: number };
-  parts: any[]; // New: captured parts
+  parts: any[];
 }
 
 class ModelingStore {
@@ -20,6 +21,7 @@ class ModelingStore {
     isGenerating: false,
     logs: [],
     result: null,
+    sceneResult: null,
     error: '',
     prompt: '',
     llm: 'astron-code-latest',
@@ -65,6 +67,7 @@ class ModelingStore {
     this.state.isGenerating = true;
     this.state.logs = [];
     this.state.result = null;
+    this.state.sceneResult = null;
     this.state.parts = [];
     this.state.error = '';
     this.state.prompt = prompt;
@@ -88,13 +91,29 @@ class ModelingStore {
               this.state.logs.push('💭 ' + ev.msg);
             }
           } else if (ev.step === 'token') {
-            tokenBuf += ev.msg;
-            if (this.state.logs.length > 0 && this.state.logs[this.state.logs.length - 1].startsWith('📝')) {
-              this.state.logs[this.state.logs.length - 1] = '📝 ' + tokenBuf;
-            } else {
-              this.state.logs.push('📝 ' + tokenBuf);
+            const text = ev.msg;
+            tokenBuf += text;
+
+            // ── 日志显示：只展示 JSON 开始前的纯文字思考内容 ──
+            // 一旦检测到 { 开始了 JSON 块，就不再更新文字日志
+            // （避免 JSON 数据被积累进日志行后，被过滤器整行隐藏）
+            const jsonStart = tokenBuf.indexOf('{');
+            const preText = (jsonStart === -1 ? tokenBuf : tokenBuf.slice(0, jsonStart)).trim();
+
+            if (preText) {
+              const lastIdx = this.state.logs.length - 1;
+              if (lastIdx >= 0 && this.state.logs[lastIdx].startsWith('📝')) {
+                this.state.logs[lastIdx] = '📝 ' + preText;
+              } else {
+                this.state.logs.push('📝 ' + preText);
+              }
+            } else if (jsonStart !== -1 && jsonStart === 0) {
+              // 纯 JSON 模型，没有文字前缀——显示一条进度提示
+              const lastIdx = this.state.logs.length - 1;
+              const hasProgress = lastIdx >= 0 && this.state.logs[lastIdx] === '⚙️ AI 正在生成零件数据...';
+              if (!hasProgress) this.state.logs.push('⚙️ AI 正在生成零件数据...');
             }
-            
+
             // ── Robust real-time parts extraction ──
             try {
               const partsFound: any[] = [];
@@ -142,6 +161,16 @@ class ModelingStore {
             this.state.result = ev as unknown as AIGenerateResult;
             if (this.state.result.parts) this.state.parts = this.state.result.parts;
             this.state.logs.push('✨ 建模完成！');
+          } else if (ev.step === 'scene_done') {
+            this.state.sceneResult = {
+              scene_name: ev.scene_name || '',
+              scene_description: ev.scene_description || '',
+              objects: ev.objects || [],
+              success_count: ev.success_count || 0,
+              total_objects: ev.total_objects || 0,
+            };
+            if (ev.tokens) this.state.tokens = ev.tokens;
+            this.state.logs.push(`🏙️ 场景完成！${ev.success_count}/${ev.total_objects} 个物体已入库`);
           } else if (ev.step === 'error') {
             this.state.error = ev.msg;
             this.state.logs.push('❌ ' + ev.msg);
