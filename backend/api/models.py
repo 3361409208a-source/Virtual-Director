@@ -13,6 +13,7 @@ from backend.services.glb_builder import build_glb
 from backend.services.asset_generator import get_system_prompt
 from backend.services.voxel_generator import generate_voxel_asset
 from backend.services.scene_generator import generate_scene
+from backend.services.skeleton_rigger import add_skeleton
 
 router = APIRouter()
 
@@ -116,6 +117,42 @@ async def upload_model(file: UploadFile = File(...)):
         "filename": file.filename,
         "size_kb":  size_kb,
         "url":      f"/api/models/custom/{file.filename}",
+    }
+
+
+# ── Auto-rig a model ─────────────────────────────────────────────────────────
+
+class RigRequest(BaseModel):
+    filename: str
+    category: str = "custom"
+
+@router.post("/models/rig")
+async def rig_model(req: RigRequest):
+    if req.category not in _CATEGORIES:
+        raise HTTPException(status_code=400, detail="Unknown category")
+    src = os.path.join(_CATEGORIES[req.category], req.filename)
+    if not os.path.exists(src):
+        raise HTTPException(status_code=404, detail="Model not found")
+
+    base, ext = os.path.splitext(req.filename)
+    rigged_name = f"{base}_rigged{ext}"
+    dst = os.path.join(_CATEGORIES["custom"], rigged_name)
+    os.makedirs(_CATEGORIES["custom"], exist_ok=True)
+
+    try:
+        info = await asyncio.to_thread(add_skeleton, src, dst)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"骨骼生成失败: {e}")
+
+    size_kb = os.path.getsize(dst) // 1024
+    return {
+        "ok":        True,
+        "filename":  rigged_name,
+        "url":       f"/api/models/custom/{rigged_name}",
+        "size_kb":   size_kb,
+        "body_type": info["body_type"],
+        "bones":     info["bones"],
+        "mesh_nodes":info["mesh_nodes"],
     }
 
 

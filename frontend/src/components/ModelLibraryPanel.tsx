@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { ModelMeta, SceneMeta } from '../services/api';
-import { listModels, listScenes, uploadModel, deleteCustomModel, optimizePrompt } from '../services/api';
+import { listModels, listScenes, uploadModel, deleteCustomModel, optimizePrompt, rigModel } from '../services/api';
+import type { RigResult } from '../services/api';
 import { ThreeModelPreview } from './ThreeModelPreview';
 import { SceneWalker } from './SceneWalker';
 import { modelingStore } from '../services/modelingStore';
@@ -43,6 +44,10 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
   const [showWalker, setShowWalker]     = useState(false);
   const [scenes, setScenes]             = useState<SceneMeta[]>([]);
   const [activeScene, setActiveScene]   = useState<SceneMeta | null>(null);
+  const [isRigging, setIsRigging]       = useState(false);
+  const [rigResult, setRigResult]       = useState<RigResult | null>(null);
+  const [rigError, setRigError]         = useState('');
+  const [activeAction, setActiveAction] = useState('idle');
   const [showActionInput, setShowActionInput] = useState(false);
   const [actionPrompt, setActionPrompt] = useState('');
   const [isStartingVideo, setIsStartingVideo] = useState(false);
@@ -312,7 +317,7 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
                 {loading && <div className="model-lib-loading">加载中...</div>}
                 {error && <div className="model-lib-error"><IconError /> {error}</div>}
                 {pagedModels.map(m => (
-                  <div key={m.id} className={`model-card ${preview?.id === m.id ? 'selected' : ''}`} onClick={() => setPreview(m)}>
+                  <div key={m.id} className={`model-card ${preview?.id === m.id ? 'selected' : ''}`} onClick={() => { setPreview(m); setRigResult(null); setRigError(''); }}>
                     <div className="model-card-viewer">
                       {/* @ts-ignore */}
                       <model-viewer src={`http://localhost:8000${m.url}`} auto-rotate camera-controls shadow-intensity="1" style={{ width: '100%', height: '100%' }} />
@@ -327,6 +332,7 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
                 {pagedModels.length === 0 && !loading && <div className="model-empty">暂无模型</div>}
               </div>
 
+              {/* 分页控制 */}
               {filteredModels.length > pageSize && (
                 <div className="lib-pager">
                   <button className="ai-pager-btn" onClick={() => setLibPage(p => Math.max(0, p - 1))} disabled={libPage === 0}>‹</button>
@@ -336,6 +342,14 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
                   <button className="ai-pager-btn" onClick={() => setLibPage(p => p + 1)} disabled={(libPage + 1) * pageSize >= filteredModels.length}>›</button>
                 </div>
               )}
+
+              {/* 迁移至此：上传按钮移出预览区，放在网格底部 */}
+              <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border-color)', background: 'var(--bg-primary)' }}>
+                <input type="file" accept=".glb" ref={fileRef} style={{ display: 'none' }} onChange={handleUpload} />
+                <button className="model-upload-btn" style={{ width: '100%', padding: '8px', fontSize: 12 }} onClick={() => fileRef.current?.click()} disabled={uploading}>
+                  {uploading ? '⏳ 上传中...' : <><IconUpload /> 上传本地 GLB 模型</>}
+                </button>
+              </div>
             </div>
 
             <div className="lib-resize-handle" onMouseDown={(e) => (window as any).startResizing(e)} />
@@ -348,6 +362,7 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
                       url={preview.url} 
                       parts={[]}
                       preset={previewPreset}
+                      currentAction={activeAction}
                     />
                   </div>
                   <div className="model-preview-info">
@@ -359,15 +374,108 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
                     <div className="model-preview-filename">{preview.filename}</div>
                   </div>
                   <div className="model-preview-actions" style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {!showActionInput ? (
-                      <button 
-                        className="model-action-btn" 
-                        style={{ background: 'var(--accent-color)', color: 'white', border: 'none', padding: '8px 12px', borderRadius: 6, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontWeight: 600 }}
-                        onClick={() => setShowActionInput(true)}
+                    {/* 功能按钮行：识别骨骼 + 让它动起来 */}
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button
+                        disabled={isRigging}
+                        onClick={async () => {
+                          if (!preview) return;
+                          setIsRigging(true);
+                          setRigResult(null);
+                          setRigError('');
+                          try {
+                            const r = await rigModel(preview.filename, preview.category);
+                            setRigResult(r);
+                            await load();
+                          } catch (e) {
+                            setRigError(e instanceof Error ? e.message : String(e));
+                          } finally {
+                            setIsRigging(false);
+                          }
+                        }}
+                        style={{
+                          flex: 1,
+                          background: isRigging ? 'rgba(88,166,255,0.1)' : 'var(--bg-secondary)',
+                          color: isRigging ? 'var(--text-secondary)' : '#58a6ff',
+                          border: '1px solid var(--border-color)',
+                          padding: '6px 0',
+                          borderRadius: 6,
+                          cursor: isRigging ? 'not-allowed' : 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 4,
+                          fontWeight: 600,
+                          fontSize: 11,
+                        }}
                       >
-                        <IconSparkles /> 让它动起来
+                        {isRigging ? '⏳ 计算中' : <>🦴 识别骨骼</>}
                       </button>
-                    ) : (
+
+                      {!showActionInput && (
+                        <button 
+                          className="model-action-btn" 
+                          style={{ flex: 1, background: 'var(--accent-color)', color: 'white', border: 'none', padding: '6px 0', borderRadius: 6, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, fontWeight: 600, fontSize: 11 }}
+                          onClick={() => setShowActionInput(true)}
+                        >
+                          <IconSparkles /> 让它动起来
+                        </button>
+                      )}
+                    </div>
+                    
+                    {rigResult && (
+                      <div style={{ background: 'rgba(63,185,80,0.05)', border: '1px solid rgba(63,185,80,0.2)', borderRadius: 6, padding: '6px 10px', fontSize: 10 }}>
+                        <div style={{ color: '#3fb950', fontWeight: 700, display: 'flex', justifyContent: 'space-between' }}>
+                          <span>✅ 识别成功</span>
+                          <span>{rigResult.body_type === 'humanoid' ? '👤 人形' : '📦 通用'}</span>
+                        </div>
+                        <a href={`http://localhost:8000${rigResult.url}`} download
+                          style={{ color: '#58a6ff', fontSize: 9, textDecoration: 'none', marginTop: 2, display: 'block' }}>
+                          ⬇ 下载骨骼模型 ({rigResult.bones} 骨)
+                        </a>
+                      </div>
+                    )}
+
+                    {/* 动作选择（仅对有骨骼的模型显示） */}
+                    {(rigResult || preview.filename.includes('_rigged')) && (
+                      <div style={{ background: 'var(--bg-secondary)', borderRadius: 8, padding: '8px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <div style={{ fontSize: 9, fontWeight: 700, opacity: 0.5, letterSpacing: '0.05em' }}>
+                          DIRECTOR'S COMMANDS
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4 }}>
+                          {[
+                            { id: 'idle', label: '呼吸', color: '#8b949e' },
+                            { id: 'wave', label: '招手', color: '#ffca28' },
+                            { id: 'walk', label: '行走', color: '#4fc3f7' },
+                            { id: 'run',  label: '奔跑', color: '#f44336' },
+                            { id: 'dance', label: '跳舞', color: '#f06292' },
+                            { id: 'no',    label: '摇头', color: '#9c27b0' },
+                            { id: 'think', label: '沉思', color: '#00bcd4' },
+                          ].map(act => (
+                            <button
+                              key={act.id}
+                              onClick={() => setActiveAction(act.id)}
+                              style={{
+                                padding: '4px 2px', borderRadius: 4, border: '1px solid',
+                                borderColor: activeAction === act.id ? act.color : 'transparent',
+                                background: activeAction === act.id ? `${act.color}22` : 'rgba(255,255,255,0.02)',
+                                color: activeAction === act.id ? act.color : 'var(--text-secondary)',
+                                fontSize: 10, cursor: 'pointer', transition: 'all 0.1s',
+                                fontWeight: activeAction === act.id ? 700 : 400,
+                              }}
+                            >
+                              {act.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {rigError && (
+                      <div style={{ background: 'rgba(248,81,73,0.1)', border: '1px solid rgba(248,81,73,0.3)', borderRadius: 6, padding: '6px 10px', fontSize: 11, color: '#f85149' }}>
+                        ❌ {rigError}
+                      </div>
+                    )}
+                    {showActionInput && (
                       <div className="model-action-input-group" style={{ display: 'flex', flexDirection: 'column', gap: 8, background: 'var(--bg-secondary)', padding: 12, borderRadius: 8, border: '1px solid var(--border-color)' }}>
                         <textarea 
                           placeholder="描述它要做什么... (例如: 在森林里奔跑)" 
@@ -397,12 +505,6 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
                   <div>选择模型进行预览</div>
                 </div>
               )}
-              <div className="model-lib-footer" style={{ padding: 16, borderTop: '1px solid var(--border-color)' }}>
-                <input type="file" accept=".glb" ref={fileRef} style={{ display: 'none' }} onChange={handleUpload} />
-                <button className="model-upload-btn" style={{ width: '100%' }} onClick={() => fileRef.current?.click()} disabled={uploading}>
-                  {uploading ? '⏳ 上传中...' : <><IconUpload /> 上传本地 GLB 模型</>}
-                </button>
-              </div>
             </div>
           </>
         )}

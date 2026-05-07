@@ -13,20 +13,28 @@ interface Props {
   backgroundColor?: string;
   preset?: LightingPreset;
   isRefining?: boolean; // 新增：是否处于精修状态
+  currentAction?: string; // 新增：当前播放的动作 (idle, wave, walk, dance)
 }
 
-export function ThreeModelPreview({ url, parts, backgroundColor = '#0d1117', preset: initialPreset = 'studio', isRefining = false }: Props) {
+export function ThreeModelPreview({ url, parts, backgroundColor = '#0d1117', preset: initialPreset = 'studio', isRefining = false, currentAction = 'idle' }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
   const currentModelRef = useRef<THREE.Group | null>(null);
+  const helperRef = useRef<THREE.SkeletonHelper | null>(null); // 新增：骨骼助手引用
   const scannerRef = useRef<THREE.Mesh | null>(null); // 扫描线引用
   const rafRef = useRef<number>(0);
   const loaderRef = useRef<GLTFLoader>(new GLTFLoader());
+  const actionRef = useRef<string>(currentAction); // 新增：用于在渲染循环中实时获取动作
 
   const [preset, setPreset] = useState<LightingPreset>(initialPreset);
+
+  // 同步动作到 Ref
+  useEffect(() => {
+    actionRef.current = currentAction;
+  }, [currentAction]);
 
   // References to lights for dynamic updates
   const lightsRef = useRef<{
@@ -217,6 +225,81 @@ export function ThreeModelPreview({ url, parts, backgroundColor = '#0d1117', pre
     const animate = () => {
       rafRef.current = requestAnimationFrame(animate);
       
+      const time = Date.now() * 0.001;
+
+      // 自动动画系统（如果有骨骼）
+      if (currentModelRef.current) {
+        currentModelRef.current.traverse((child) => {
+          if ((child as THREE.Bone).isBone) {
+            const bone = child as THREE.Bone;
+            const name = bone.name.toLowerCase();
+
+            // 归位（在每一帧开始前轻微插值回到原始位置，防止动作突变）
+            bone.rotation.x *= 0.8;
+            bone.rotation.y *= 0.8;
+            bone.rotation.z *= 0.8;
+
+            const activeAct = actionRef.current;
+
+            if (activeAct === 'idle') {
+              if (name.includes('spine') || name.includes('hips') || name.includes('middle')) {
+                bone.rotation.z = Math.sin(time * 1.5) * 0.03;
+                bone.rotation.x = Math.cos(time * 1.2) * 0.02;
+              }
+              if (name.includes('arm') && !name.includes('leg')) bone.rotation.z += Math.sin(time * 2) * 0.01;
+            } 
+            else if (activeAct === 'wave') {
+              // 招手：仅针对右臂，严格排除腿部
+              if ((name.includes('right') && name.includes('arm')) && !name.includes('leg')) {
+                bone.rotation.z = -1.3 + Math.sin(time * 5) * 0.4;
+              }
+              if (name.includes('spine')) bone.rotation.y = Math.sin(time * 2) * 0.05;
+            }
+            else if (activeAct === 'walk' || activeAct === 'run') {
+              const speed = activeAct === 'run' ? 10 : 6;
+              const amp = activeAct === 'run' ? 0.8 : 0.5;
+              const swing = Math.sin(time * speed);
+              // 腿部
+              if (name.includes('leg')) {
+                if (name.includes('left') && name.includes('upper')) bone.rotation.x = swing * amp;
+                if (name.includes('right') && name.includes('upper')) bone.rotation.x = -swing * amp;
+                if (name.includes('lower')) bone.rotation.x = (name.includes('left') ? (swing > 0 ? swing : 0) : (swing < 0 ? -swing : 0)) * 0.6;
+              }
+              // 手臂
+              if (name.includes('arm')) {
+                if (name.includes('left')) bone.rotation.x = -swing * (amp * 0.8);
+                if (name.includes('right')) bone.rotation.x = swing * (amp * 0.8);
+              }
+              if (name.includes('spine')) bone.rotation.z = swing * 0.05;
+            }
+            else if (activeAct === 'dance') {
+              const speed = 8;
+              bone.rotation.y += Math.sin(time * speed) * 0.2;
+              if (name.includes('spine')) {
+                bone.rotation.z = Math.sin(time * speed) * 0.3;
+                bone.rotation.x = Math.cos(time * speed * 0.5) * 0.2;
+              }
+              if (name.includes('arm') && !name.includes('leg')) bone.rotation.z = (name.includes('left') ? -1 : 1) * (1 + Math.sin(time * speed) * 0.5);
+            }
+            else if (activeAct === 'no') {
+              if (name.includes('head') || name.includes('neck') || name.includes('top')) {
+                bone.rotation.y = Math.sin(time * 8) * 0.4;
+              }
+            }
+            else if (activeAct === 'think') {
+              if (name.includes('head') || name.includes('neck') || name.includes('top')) {
+                bone.rotation.x = 0.3;
+                bone.rotation.z = Math.sin(time * 1) * 0.1;
+              }
+              if (name.includes('arm') && name.includes('left')) {
+                bone.rotation.z = -0.8;
+                bone.rotation.x = -0.5;
+              }
+            }
+          }
+        });
+      }
+
       // 扫描线动画
       if (scannerRef.current) {
         if (isRefining) {
@@ -280,15 +363,36 @@ export function ThreeModelPreview({ url, parts, backgroundColor = '#0d1117', pre
       currentModelRef.current = null;
     }
 
+    // 核心修复：清理旧的骨骼辅助线
+    if (helperRef.current) {
+      scene.remove(helperRef.current);
+      helperRef.current = null;
+    }
+
     const fullUrl = url.startsWith('http') ? url : `http://localhost:8000${url}`;
     loaderRef.current.load(fullUrl, (gltf: { scene: THREE.Group }) => {
       const model = gltf.scene;
+      
+      // 查找骨骼并添加可视化
+      let hasBones = false;
       model.traverse((child: THREE.Object3D) => {
-        if ((child as THREE.Mesh).isMesh) {
+        if ((child as THREE.SkinnedMesh).isSkinnedMesh) {
+          hasBones = true;
+          child.castShadow = true;
+          child.receiveShadow = true;
+        } else if ((child as THREE.Mesh).isMesh) {
           child.castShadow = true;
           child.receiveShadow = true;
         }
       });
+
+      if (hasBones && sceneRef.current) {
+        const helper = new THREE.SkeletonHelper(model);
+        (helper.material as THREE.LineBasicMaterial).linewidth = 2;
+        sceneRef.current.add(helper);
+        helperRef.current = helper; // 记录引用以便下次清理
+      }
+
       // Normalize scale and position
       const box = new THREE.Box3().setFromObject(model);
       const size = box.getSize(new THREE.Vector3());

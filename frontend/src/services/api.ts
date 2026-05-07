@@ -74,6 +74,29 @@ export async function listScenes(): Promise<SceneMeta[]> {
   return data.scenes ?? [];
 }
 
+export interface RigResult {
+  ok: boolean;
+  filename: string;
+  url: string;
+  size_kb: number;
+  body_type: string;
+  bones: number;
+  mesh_nodes: number;
+}
+
+export async function rigModel(filename: string, category = 'custom'): Promise<RigResult> {
+  const res = await fetch(`${API_BASE}/models/rig`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename, category }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || '骨骼生成失败');
+  }
+  return res.json();
+}
+
 export async function deleteCustomModel(filename: string): Promise<void> {
   await fetch(`${API_BASE}/models/custom/${filename}`, { method: 'DELETE' });
 }
