@@ -64,7 +64,7 @@ export function SceneWalker({ objects, sceneName, onClose }: Props) {
     renderer.toneMappingExposure = 1.2;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    container.innerHTML = '';
+    // 不用 innerHTML='' 清空（避免与 React 虚拟DOM冲突），直接 append canvas
     container.appendChild(renderer.domElement);
     rendRef.current = renderer;
 
@@ -256,7 +256,15 @@ export function SceneWalker({ objects, sceneName, onClose }: Props) {
     const ro = new ResizeObserver(onResize);
     ro.observe(container);
 
-    return () => { ro.disconnect(); };
+    return () => {
+      ro.disconnect();
+      // 安全删除 canvas，防止 React 卸载时出现 removeChild 崩溃
+      try {
+        if (renderer.domElement.parentNode === container) {
+          container.removeChild(renderer.domElement);
+        }
+      } catch { /* ignore */ }
+    };
   }, [objects]);
 
   // ── Input handling ─────────────────────────────────────────────────────────
@@ -306,7 +314,9 @@ export function SceneWalker({ objects, sceneName, onClose }: Props) {
     return () => {
       cleanup?.();
       cancelAnimationFrame(rafRef.current);
-      rendRef.current?.dispose();
+      // canvas 已由 buildWorld cleanup 删除，这里只停渲染器资源
+      try { rendRef.current?.dispose(); } catch { /* ignore */ }
+      rendRef.current = null;
     };
   }, [buildWorld]);
 

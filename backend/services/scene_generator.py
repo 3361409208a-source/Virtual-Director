@@ -41,7 +41,8 @@ _OBJ_SYSTEM = (
 )
 
 # 强制为每个物体使用的快速模型（与用户的场景规划模型解耦）
-_FAST_OBJ_MODEL = "GLM-4.7-Flash"
+# deepseek-v4-flash 限额更宽，适合批量并行；避免使用 GLM 免费账号同时打多个请求
+_FAST_OBJ_MODEL = "deepseek-v4-flash"
 
 
 def _build_object_glb(obj: dict, llm_model: str, progress_cb=None) -> dict | None:
@@ -55,13 +56,12 @@ def _build_object_glb(obj: dict, llm_model: str, progress_cb=None) -> dict | Non
     if progress_cb:
         progress_cb(f"🔧 [{name}] 正在建模...")
 
-    # 总是用快速模型生成单个物体，节省时间
-    set_model(_FAST_OBJ_MODEL)
-
     for attempt in range(2):
         try:
             cur_prompt = prompt if attempt == 0 else f"{prompt} (simple version, max 8 parts)"
-            result = llm_call(_OBJ_SYSTEM, cur_prompt, ai_model_tool)
+            # model_override 直接传给 llm_call，避免多线程 ContextVar 竞争
+            result = llm_call(_OBJ_SYSTEM, cur_prompt, ai_model_tool,
+                               model_override=_FAST_OBJ_MODEL)
             parts = result.get("parts", [])
             if not parts:
                 if attempt == 0:
@@ -148,7 +148,7 @@ async def generate_scene(
     _cb(f"⚙️ 开始并行生成 {len(objects_plan)} 个模型...")
 
     results = []
-    max_workers = min(len(objects_plan), 6)
+    max_workers = min(len(objects_plan), 3)  # 3 并发，平衡速度与速率限制
 
     def _task(obj):
         return _build_object_glb(obj, llm_model, progress_cb=_cb)
@@ -161,6 +161,7 @@ async def generate_scene(
     success_count = len(results)
 
     _cb(f"🎬 场景建模完成！成功 {success_count}/{len(objects_plan)} 个物体")
+    _cb(f"📂 文件位置：{CUSTOM_DIR}")
 
     # ── Step 3: 保存场景描述符 JSON ──
     scene_data = {

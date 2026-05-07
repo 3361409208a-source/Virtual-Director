@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import time
 from contextvars import ContextVar
 from openai import OpenAI
 import anthropic as _anthropic_mod
@@ -224,6 +225,9 @@ def llm_call(system: str, user: str, tool: dict, token_cb=None, thinking_cb=None
     last_error = None
 
     for attempt in range(retries + 1):
+        if attempt > 0:
+            # 429 速率限制：指数退避，避免立刻重试继续触发限流
+            time.sleep(2 ** attempt)  # 2s, 4s
         try:
             args_str = ""
             input_est = int(len(system + user) * 1.25)

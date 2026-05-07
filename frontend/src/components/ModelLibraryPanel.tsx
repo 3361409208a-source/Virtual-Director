@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
-import type { ModelMeta } from '../services/api';
-import { listModels, uploadModel, deleteCustomModel, optimizePrompt } from '../services/api';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import type { ModelMeta, SceneMeta } from '../services/api';
+import { listModels, listScenes, uploadModel, deleteCustomModel, optimizePrompt } from '../services/api';
 import { ThreeModelPreview } from './ThreeModelPreview';
 import { SceneWalker } from './SceneWalker';
 import { modelingStore } from '../services/modelingStore';
@@ -18,7 +18,7 @@ const CAT_COLOR: Record<string, string> = {
   custom:     '#f0883e',
 };
 
-export type Tab = 'library' | 'ai';
+export type Tab = 'library' | 'ai' | 'scenes';
 
 export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library', onStartVideo }: { 
   isStandalone?: boolean, 
@@ -40,7 +40,9 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
   const [previewPreset] = useState<any>('studio');
   const [isOptimizing, setIsOptimizing] = useState(false);
 
-  const [showWalker, setShowWalker] = useState(false);
+  const [showWalker, setShowWalker]     = useState(false);
+  const [scenes, setScenes]             = useState<SceneMeta[]>([]);
+  const [activeScene, setActiveScene]   = useState<SceneMeta | null>(null);
   const [showActionInput, setShowActionInput] = useState(false);
   const [actionPrompt, setActionPrompt] = useState('');
   const [isStartingVideo, setIsStartingVideo] = useState(false);
@@ -86,7 +88,11 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
   const [showBaseModal, setShowBaseModal] = useState(false);
   const [tempBaseModel, setTempBaseModel] = useState<ModelMeta | null>(null);
 
-  const load = async () => {
+  const loadScenes = useCallback(async () => {
+    try { setScenes(await listScenes()); } catch { /* ignore */ }
+  }, []);
+
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       setModels(await listModels());
@@ -96,9 +102,14 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  useEffect(() => { if (open || isStandalone) load(); }, [open, isStandalone]);
+  useEffect(() => {
+    if (open || isStandalone) {
+      load();
+      loadScenes();
+    }
+  }, [open, isStandalone, load, loadScenes]);
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -209,7 +220,7 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
   const renderContent = () => (
     <>
       <div className="model-lib-header">
-        <div className="model-lib-title">{isStandalone ? (tab === 'ai' ? "AI 深度建模工作室" : "资产库") : "资产库"}</div>
+        <div className="model-lib-title">{isStandalone ? (tab === 'ai' ? "AI 深度建模工作室" : tab === 'scenes' ? '场景库' : "资产库") : "资产库"}</div>
         <div className="model-lib-header-actions">
           {!isStandalone && (
             <div className="model-lib-top-tabs">
@@ -219,6 +230,9 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
               <button className={`model-top-tab ${tab === 'ai' ? 'active' : ''}`} onClick={() => setTab('ai')}>
                 <IconSparkles /> AI 建模
               </button>
+              <button className={`model-top-tab ${tab === 'scenes' ? 'active' : ''}`} onClick={() => { setTab('scenes'); loadScenes(); }}>
+                🏙️ 场景库
+              </button>
             </div>
           )}
           {!isStandalone && <button className="model-lib-close" onClick={() => setOpen(false)}><IconClose /></button>}
@@ -226,6 +240,47 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
       </div>
 
       <div className="model-lib-body">
+        {tab === 'scenes' && (
+          <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+            {scenes.length === 0 ? (
+              <div style={{ textAlign: 'center', color: 'var(--text-secondary)', marginTop: 60 }}>
+                <div style={{ fontSize: 36, marginBottom: 12 }}>🏙️</div>
+                <div style={{ fontWeight: 600 }}>暂无保存的场景</div>
+                <div style={{ fontSize: 11, marginTop: 6 }}>使用 AI 建模 → 场景建模 生成第一个场景</div>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px,1fr))', gap: 14 }}>
+                {scenes.map(sc => (
+                  <div key={sc.filename} style={{
+                    background: 'var(--bg-secondary)', border: '1px solid var(--border-color)',
+                    borderRadius: 12, padding: 14, display: 'flex', flexDirection: 'column', gap: 8,
+                  }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--accent)' }}>🏙️ {sc.scene_name}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{sc.scene_description}</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                      {sc.objects.slice(0, 6).map((o, i) => (
+                        <span key={i} style={{
+                          background: 'rgba(88,166,255,0.1)', border: '1px solid rgba(88,166,255,0.2)',
+                          borderRadius: 4, padding: '1px 7px', fontSize: 10, color: '#58a6ff',
+                        }}>{o.name}</span>
+                      ))}
+                      {sc.objects.length > 6 && <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>+{sc.objects.length - 6}</span>}
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{sc.success_count} 个物体 · {new Date(sc.mtime * 1000).toLocaleDateString()}</div>
+                    <button
+                      onClick={() => { setActiveScene(sc); setShowWalker(true); }}
+                      style={{
+                        padding: '7px 0', borderRadius: 8, border: 'none', cursor: 'pointer',
+                        background: 'linear-gradient(135deg,#1f6feb,#388bfd)',
+                        color: '#fff', fontWeight: 700, fontSize: 12,
+                      }}
+                    >🎮 进入场景漫游</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         {tab === 'library' && (
           <>
             <div className="model-lib-grid-col">
@@ -643,11 +698,11 @@ export function ModelLibraryPanel({ isStandalone = false, initialTab = 'library'
         </div>
       )}
 
-      {showWalker && sceneResult && (
+      {showWalker && (activeScene ?? sceneResult) && (
         <SceneWalker
-          objects={sceneResult.objects}
-          sceneName={sceneResult.scene_name}
-          onClose={() => setShowWalker(false)}
+          objects={(activeScene ?? sceneResult)!.objects}
+          sceneName={(activeScene ?? sceneResult)!.scene_name}
+          onClose={() => { setShowWalker(false); setActiveScene(null); }}
         />
       )}
     </>

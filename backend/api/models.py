@@ -68,6 +68,37 @@ def get_model_file(category: str, filename: str):
     )
 
 
+# ── List saved scenes ────────────────────────────────────────────────────────
+
+@router.get("/models/scenes")
+def list_scenes():
+    custom_dir = _CATEGORIES["custom"]
+    scenes = []
+    if not os.path.isdir(custom_dir):
+        return {"scenes": []}
+    for fname in os.listdir(custom_dir):
+        if not fname.endswith(".scene.json"):
+            continue
+        full = os.path.join(custom_dir, fname)
+        try:
+            with open(full, encoding="utf-8") as f:
+                data = json.load(f)
+            stat = os.stat(full)
+            scenes.append({
+                "filename":          fname,
+                "scene_name":        data.get("scene_name", fname),
+                "scene_description": data.get("scene_description", ""),
+                "objects":           data.get("objects", []),
+                "success_count":     len(data.get("objects", [])),
+                "total_objects":     len(data.get("objects", [])),
+                "mtime":             stat.st_mtime,
+            })
+        except Exception:
+            continue
+    scenes.sort(key=lambda s: s["mtime"], reverse=True)
+    return {"scenes": scenes}
+
+
 # ── Upload a custom model ────────────────────────────────────────────────────
 
 @router.post("/models/upload")

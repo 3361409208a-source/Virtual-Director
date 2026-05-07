@@ -55,6 +55,25 @@ export async function uploadModel(file: File): Promise<ModelMeta> {
   return { id: `custom/${d.filename}`, category: 'custom', filename: d.filename, name: d.filename.replace('.glb',''), size_kb: d.size_kb, url: d.url };
 }
 
+// ── Scene Library ───────────────────────────────────────────────────────────
+
+export interface SceneMeta {
+  filename: string;
+  scene_name: string;
+  scene_description: string;
+  objects: SceneObject[];
+  success_count: number;
+  total_objects: number;
+  mtime: number;
+}
+
+export async function listScenes(): Promise<SceneMeta[]> {
+  const res = await fetch(`${API_BASE}/models/scenes`);
+  if (!res.ok) throw new Error('获取场景列表失败');
+  const data = await res.json();
+  return data.scenes ?? [];
+}
+
 export async function deleteCustomModel(filename: string): Promise<void> {
   await fetch(`${API_BASE}/models/custom/${filename}`, { method: 'DELETE' });
 }
