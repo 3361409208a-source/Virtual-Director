@@ -158,6 +158,94 @@ def _world_translation(node_idx: int, gltf: pygltflib.GLTF2,
     return tx, ty, tz
 
 
+# Bone name → (keyword list, side: 'left'|'right'|'center', axis: 'arm'|'leg'|'torso')
+_BONE_SEARCH: dict[str, tuple[list[str], str, str]] = {
+    "left_upper_arm":  (["left_upper_arm", "l_upper_arm", "upper_arm_l", "left_shoulder"], "left",  "arm"),
+    "left_lower_arm":  (["left_lower_arm", "l_lower_arm", "lower_arm_l", "forearm_l"],     "left",  "arm"),
+    "left_hand":       (["left_hand",      "l_hand",      "hand_l"],                       "left",  "arm"),
+    "right_upper_arm": (["right_upper_arm","r_upper_arm", "upper_arm_r", "right_shoulder"],"right", "arm"),
+    "right_lower_arm": (["right_lower_arm","r_lower_arm", "lower_arm_r", "forearm_r"],     "right", "arm"),
+    "right_hand":      (["right_hand",     "r_hand",      "hand_r"],                       "right", "arm"),
+    "left_upper_leg":  (["left_upper_leg", "l_upper_leg", "upper_leg_l", "left_thigh", "thigh_l"], "left",  "leg"),
+    "left_lower_leg":  (["left_lower_leg", "l_lower_leg", "lower_leg_l", "calf_l"],        "left",  "leg"),
+    "left_foot":       (["left_foot",      "l_foot",      "foot_l"],                       "left",  "leg"),
+    "right_upper_leg": (["right_upper_leg","r_upper_leg", "upper_leg_r", "right_thigh", "thigh_r"], "right", "leg"),
+    "right_lower_leg": (["right_lower_leg","r_lower_leg", "lower_leg_r", "calf_r"],        "right", "leg"),
+    "right_foot":      (["right_foot",     "r_foot",      "foot_r"],                       "right", "leg"),
+    "head":            (["head", "skull", "helmet", "face"],                               "center","torso"),
+    "neck":            (["neck", "collar"],                                                 "center","torso"),
+    "chest":           (["chest", "torso", "upper_body", "trunk"],                         "center","torso"),
+    "spine":           (["spine", "abdomen", "belly"],                                      "center","torso"),
+    "hips":            (["hip", "pelvis", "waist"],                                         "center","torso"),
+}
+
+
+def _build_joint_positions(
+    gltf: pygltflib.GLTF2, parent_map: dict
+) -> dict[str, tuple[float, float, float]]:
+    """
+    For each bone defined in _BONE_SEARCH, find the best matching named mesh node
+    and compute the PROXIMAL JOINT position (not mesh center):
+      - arm bones: proximal edge in X (inner side toward body)
+      - leg bones: proximal edge in Y (top = hip/knee/ankle joint)
+      - torso bones: mesh center (Y midpoint)
+    Returns {bone_name: (wx, wy, wz)} for matched bones only.
+    """
+    # Build {lowercased_node_name: (xmin, xmax, ymin, ymax, zmid, world_tx, world_ty, world_tz)}
+    node_bounds: dict[str, tuple] = {}
+    for i, node in enumerate(gltf.nodes):
+        if node.mesh is None or not node.name:
+            continue
+        mesh = gltf.meshes[node.mesh]
+        xmins, xmaxs, ymins, ymaxs, zmids = [], [], [], [], []
+        for prim in mesh.primitives:
+            if prim.attributes is None or prim.attributes.POSITION is None:
+                continue
+            acc = gltf.accessors[prim.attributes.POSITION]
+            if acc.min and acc.max:
+                xmins.append(acc.min[0]);  xmaxs.append(acc.max[0])
+                ymins.append(acc.min[1]);  ymaxs.append(acc.max[1])
+                zmids.append((acc.min[2] + acc.max[2]) / 2)
+        if not xmins:
+            continue
+        wx, wy, wz = _world_translation(i, gltf, parent_map)
+        node_bounds[node.name.lower()] = (
+            min(xmins) + wx, max(xmaxs) + wx,
+            min(ymins) + wy, max(ymaxs) + wy,
+            sum(zmids) / len(zmids) + wz,
+        )
+
+    result: dict[str, tuple[float, float, float]] = {}
+    for bone_name, (keywords, side, axis) in _BONE_SEARCH.items():
+        # Try each keyword in order
+        found = None
+        for kw in keywords:
+            for nname, bounds in node_bounds.items():
+                if kw in nname:
+                    found = bounds
+                    break
+            if found:
+                break
+        if found is None:
+            continue
+
+        x_lo, x_hi, y_lo, y_hi, z_mid = found
+        x_mid = (x_lo + x_hi) / 2
+        y_mid = (y_lo + y_hi) / 2
+
+        if axis == "arm":
+            # Proximal = edge closest to body (cx=0)
+            joint_x = x_hi if side == "left" else x_lo   # left arm inner edge = max X
+            result[bone_name] = (joint_x, y_mid, z_mid)
+        elif axis == "leg":
+            # Proximal = top edge (max Y)
+            result[bone_name] = (x_mid, y_hi, z_mid)
+        else:  # torso / head
+            result[bone_name] = (x_mid, y_mid, z_mid)
+
+    return result
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Main entry point
 # ─────────────────────────────────────────────────────────────────────────────
@@ -180,13 +268,22 @@ def add_skeleton(src_path: str, dst_path: str) -> dict:
     cx     = (xmin + xmax) / 2.0
 
     # ── 1. Compute world positions for each bone ──────────────────────────────
+    # Try to read joint positions from actual named mesh nodes first;
+    # fall back to bounding-box formula for unmatched bones.
+    joint_positions = _build_joint_positions(gltf, parent_map)
+    matched = len(joint_positions)
+    print(f"[SkeletonRigger] data-driven joints matched: {matched}/{len(bone_defs)} bones")
+
     bone_world: list[tuple[float, float, float]] = []
-    for _, _, yrel, xoff, zoff in bone_defs:
-        bone_world.append((
-            cx + xoff * width,
-            ymin + yrel * height,
-            zoff * width,
-        ))
+    for bname, _, yrel, xoff, zoff in bone_defs:
+        if bname in joint_positions:
+            bone_world.append(joint_positions[bname])
+        else:
+            bone_world.append((
+                cx + xoff * width,
+                ymin + yrel * height,
+                zoff * width,
+            ))
 
     # ── 2. Create bone nodes ──────────────────────────────────────────────────
     first_bone_node = len(gltf.nodes)
