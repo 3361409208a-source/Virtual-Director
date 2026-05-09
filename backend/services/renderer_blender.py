@@ -609,6 +609,34 @@ def _apply_walk_cycle(kfs: list, part_map: dict, fps: int, scene) -> None:
         return
 
     walk_freq = 1.8   # steps/sec at walking pace
+    head   = _find_part(part_map, ["head", "skull", "helmet"])
+    chest  = spine  # alias
+
+    # ── idle: resting pose + subtle breathing ────────────────────────────────
+    idle_kfs = [kf for kf in kfs if kf.get("bone_anim", "") == "idle"]
+    if idle_kfs:
+        for kf in idle_kfs:
+            t0 = float(kf.get("time", 0))
+            t1_kf = next((k for k in kfs if float(k.get("time", 0)) > t0), None)
+            t1 = float(t1_kf.get("time", t0 + 1.0)) if t1_kf else t0 + 1.0
+            for f in range(int(t0 * fps), int(t1 * fps) + 1):
+                fr = f + 1
+                curr_t = f / fps
+                breath = math.sin(curr_t * 2 * math.pi * 0.3) * 1.5  # 0.3 Hz breathing
+                # Arms hang slightly down from T-pose (Z-axis tilt ≈ -12°) + subtle sway
+                sway = math.sin(curr_t * 2 * math.pi * 0.15) * 2.0
+                if arm_l:
+                    arm_l.rotation_euler = Euler((0, 0, math.radians(-12 + sway)))
+                    arm_l.keyframe_insert("rotation_euler", frame=fr)
+                if arm_r:
+                    arm_r.rotation_euler = Euler((0, 0, math.radians(12 - sway)))
+                    arm_r.keyframe_insert("rotation_euler", frame=fr)
+                if chest:
+                    chest.rotation_euler = Euler((math.radians(breath * 0.4), 0, 0))
+                    chest.keyframe_insert("rotation_euler", frame=fr)
+                if head:
+                    head.rotation_euler = Euler((0, math.radians(sway * 0.3), 0))
+                    head.keyframe_insert("rotation_euler", frame=fr)
 
     for i, kf in enumerate(kfs):
         t0         = float(kf.get("time", 0))
@@ -631,11 +659,14 @@ def _apply_walk_cycle(kfs: list, part_map: dict, fps: int, scene) -> None:
                 continue
 
         if bone_anim == "idle":
-            continue
+            continue  # handled above
 
         freq      = walk_freq * (1.7 if bone_anim == "run" else 1.0)
         amplitude = 38.0 if bone_anim == "run" else 28.0
-        arm_amp   = amplitude * 0.55
+        # Arms: T-pose extends in ±X, so Z-rotation swings them forward/backward (XY plane)
+        arm_amp   = amplitude * 0.45
+        # Slightly bring arms in front of body to prevent torso clipping (−10° base Z)
+        arm_base_z = -10.0  # degrees – slight forward lean from full T-pose
 
         for f in range(int(t0 * fps), int(t1 * fps) + 1):
             curr_t = f / fps
@@ -643,35 +674,45 @@ def _apply_walk_cycle(kfs: list, part_map: dict, fps: int, scene) -> None:
             fr     = f + 1
 
             if bone_anim == "ragdoll":
-                rnd = math.sin(curr_t * 7.3) * 45
+                rnd  = math.sin(curr_t * 7.3) * 45
+                rnd2 = math.sin(curr_t * 5.1) * 30
                 if leg_l:
-                    leg_l.rotation_euler = Euler((math.radians(rnd * 1.1), math.radians(rnd * 0.4), 0))
+                    leg_l.rotation_euler = Euler((math.radians(rnd * 1.1), math.radians(rnd2 * 0.3), math.radians(rnd * 0.3)))
                     leg_l.keyframe_insert("rotation_euler", frame=fr)
                 if leg_r:
-                    leg_r.rotation_euler = Euler((math.radians(-rnd * 0.9), math.radians(-rnd * 0.5), 0))
+                    leg_r.rotation_euler = Euler((math.radians(-rnd * 0.9), math.radians(-rnd2 * 0.4), math.radians(-rnd * 0.3)))
                     leg_r.keyframe_insert("rotation_euler", frame=fr)
                 if arm_l:
-                    arm_l.rotation_euler = Euler((math.radians(-rnd * 0.8), 0, math.radians(rnd * 0.6)))
+                    # Arms fling outward/forward in ragdoll
+                    arm_l.rotation_euler = Euler((math.radians(rnd * 0.3), math.radians(rnd2 * 0.4), math.radians(-20 + rnd * 0.6)))
                     arm_l.keyframe_insert("rotation_euler", frame=fr)
                 if arm_r:
-                    arm_r.rotation_euler = Euler((math.radians(rnd * 0.7), 0, math.radians(-rnd * 0.6)))
-                    arm_r.keyframe_insert("rotation_euler", frame=fr)
-            else:
-                scene.frame_set(fr)
-                if leg_l:
-                    leg_l.rotation_euler = Euler((math.radians(math.sin(phase) * amplitude), 0, 0))
-                    leg_l.keyframe_insert("rotation_euler", frame=fr)
-                if leg_r:
-                    leg_r.rotation_euler = Euler((math.radians(-math.sin(phase) * amplitude), 0, 0))
-                    leg_r.keyframe_insert("rotation_euler", frame=fr)
-                if arm_l:
-                    arm_l.rotation_euler = Euler((math.radians(-math.sin(phase) * arm_amp), 0, 0))
-                    arm_l.keyframe_insert("rotation_euler", frame=fr)
-                if arm_r:
-                    arm_r.rotation_euler = Euler((math.radians(math.sin(phase) * arm_amp), 0, 0))
+                    arm_r.rotation_euler = Euler((math.radians(-rnd * 0.3), math.radians(-rnd2 * 0.4), math.radians(20 - rnd * 0.6)))
                     arm_r.keyframe_insert("rotation_euler", frame=fr)
                 if spine:
-                    spine.rotation_euler = Euler((math.radians(5 + math.sin(phase * 0.5) * 3), 0, 0))
+                    spine.rotation_euler = Euler((math.radians(rnd2 * 0.5), math.radians(rnd * 0.2), 0))
+                    spine.keyframe_insert("rotation_euler", frame=fr)
+            else:
+                scene.frame_set(fr)
+                swing = math.sin(phase)
+                if leg_l:
+                    leg_l.rotation_euler = Euler((math.radians(swing * amplitude), 0, 0))
+                    leg_l.keyframe_insert("rotation_euler", frame=fr)
+                if leg_r:
+                    leg_r.rotation_euler = Euler((math.radians(-swing * amplitude), 0, 0))
+                    leg_r.keyframe_insert("rotation_euler", frame=fr)
+                if arm_l:
+                    # Z rotation: swings T-pose arm forward(−) / backward(+) in XY plane
+                    z_l = arm_base_z + swing * arm_amp
+                    arm_l.rotation_euler = Euler((0, 0, math.radians(-z_l)))
+                    arm_l.keyframe_insert("rotation_euler", frame=fr)
+                if arm_r:
+                    z_r = arm_base_z - swing * arm_amp
+                    arm_r.rotation_euler = Euler((0, 0, math.radians(z_r)))
+                    arm_r.keyframe_insert("rotation_euler", frame=fr)
+                if spine:
+                    # Slight counter-rotation of torso (opposite to leg swing)
+                    spine.rotation_euler = Euler((math.radians(3 - swing * 4), 0, math.radians(-swing * 3)))
                     spine.keyframe_insert("rotation_euler", frame=fr)
 
 

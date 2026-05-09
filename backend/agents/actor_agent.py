@@ -77,7 +77,16 @@ def _actor_system(director: dict, actor_ids: list[str] | None = None) -> str:
         "若资产命名只有 wheel 则统一填写 sub_tracks.wheel。\n\n"
         "═══ 通用 sub_tracks ═══\n"
         "sub_tracks 键名为部件名称（与 asset manifest 的 parts.name 一致）；\n"
-        "抬臂：sub_tracks.left_arm rotation.x=90°；转头：sub_tracks.head rotation.y=30°；\n"
+        "【T-Pose 手臂旋转轴说明】模型采用 T-Pose，手臂沿 ±X 轴水平展开，正确旋转轴为：\n"
+        "  · rotation.z（±）：手臂在水平面前后摆动（Z轴旋转）→ 适合挥手、拦截等侧向动作\n"
+        "  · rotation.y（-为抬起）：手臂绕 Y 轴抬高/放低（从 T-Pose 向上）→ 适合举手、指向\n"
+        "  · rotation.x：让手臂网格在自身轴上翻转，视觉效果很弱，一般不用\n"
+        "【防穿模规范】手臂动作必须先通过 rotation.z 将手臂朝身体前方偏移后，再做抬手/挥手：\n"
+        "  正确示例—招手（左臂）：\n"
+        "    第一帧 sub_tracks.left_arm = {rotation: {x:0, y:0,  z:0}}   ← T-Pose 初始\n"
+        "    过渡帧 sub_tracks.left_arm = {rotation: {x:0, y:0,  z:-20}} ← 先向前摆 20°\n"
+        "    挥手帧 sub_tracks.left_arm = {rotation: {x:0, y:-70, z:-20}} ← 保持前移同时抬起 70°\n"
+        "  转头示例：sub_tracks.head rotation.y=30°（左右转头）\n"
         "仅在有 composite 类型资产时使用 sub_tracks，下载模型无效果。"
     )
 
