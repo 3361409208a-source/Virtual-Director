@@ -82,6 +82,15 @@ ACTOR_KEYFRAME: dict = {
                 "z": {"type": "number"},
             },
         },
+        "bone_anim": {
+            "type": "string",
+            "enum": ["idle", "walk", "run", "ragdoll"],
+            "description": (
+                "人形角色当前关键帧区间的骨骼动画状态（仅 humanoid 类型演员使用）："
+                "idle=站立静止; walk=正常步行(速度<3m/s); run=跑步/冲刺(速度>=3m/s); "
+                "ragdoll=被击飞/失去控制/倒地。渲染器会自动生成对应的肢体摆动动画。"
+            ),
+        },
         "sub_tracks": {
             "type": "object",
             "description": "针对复合模型(composite)中特定部件(parts)的动画。Key为部件name，Value为该部件在当前时刻的局部变换。",

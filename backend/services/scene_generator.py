@@ -37,6 +37,7 @@ _OBJ_SYSTEM = (
     "- 零件数量：8-15 个（严格限制，不得超过 15）\n"
     "- 每个零件用基础形状（box/sphere/cylinder）组合表达\n"
     "- 材质简洁但有辨识度（metallic/roughness/emissive）\n"
+    "- 【骨骼化命名】：零件 name 必须使用语义化词汇（如 head, torso, leg, arm, wheel, base），方便后端自动识别可动关节。\n"
     "- 直接输出 JSON，不要任何解释或 markdown。"
 )
 

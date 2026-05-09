@@ -32,11 +32,22 @@ def get_system_prompt(base_model: str = "") -> str:
         "- 【材质极限】：尝试设置 roughness < 0.1 来模拟镜面/玻璃，或 metallic > 0.9 来模拟流态汞。\n"
         "- 【光效控制】：必须使用 `emissive` 颜色为物体注入生命力。\n"
         f"{base_ctx}\n"
-        "让每一个模型都像是一件价值连城的赛博艺术品。开始你的奇幻创作："
+        "\n═══ [第三阶段：骨骼化规范 (重要)] ═══\n"
+        "为了让模型能够被后端算法正确识别并添加动作，你必须：\n"
+        "1. 【标准姿态】：如果是人型或生物，必须采用标准的 T-Pose（双臂平举）或 A-Pose。确保模型垂直站立，正向朝向 Z 轴。\n"
+        "2. 【语义化命名】：零件的 `name` 字段必须包含识别关键词。例如：\n"
+        "   - 头部：head, neck, helmet\n"
+        "   - 躯干：torso, spine, chest, hips\n"
+        "   - 手臂：left_arm, right_arm, hand, shoulder\n"
+        "   - 腿部：left_leg, right_leg, foot, knee\n"
+        "3. 【物理结构】：尽量避免零件之间产生深度穿插。如果是关节部位（如肘部、膝部），在连接处稍微留出空隙或使用明显的转折件。\n"
+        "\n让每一个模型都像是一件价值连城的赛博艺术品。开始你的奇幻创作："
     )
 
-async def generate_single_asset(actor_id: str, prompt: str, model: str = "astron-code-latest", progress_cb=None) -> str:
-    """Generates a GLB for a single actor and returns the relative path."""
+async def generate_single_asset(actor_id: str, prompt: str, model: str = "astron-code-latest", progress_cb=None) -> dict:
+    """Generates a GLB for a single actor.
+    Returns {"path": rel_path, "abs_path": abs_path, "parts": [...]} or {} on failure.
+    """
     def _cb(msg: str):
         if progress_cb:
             progress_cb(f"🧱 [{actor_id}] {msg}")
@@ -50,19 +61,19 @@ async def generate_single_asset(actor_id: str, prompt: str, model: str = "astron
         result = await asyncio.to_thread(llm_call, system, prompt, ai_model_tool)
     except Exception as e:
         print(f"[AssetGenerator] LLM failed for {actor_id}: {e}")
-        return ""
+        return {}
 
     parts = result.get("parts", [])
     if not parts:
         _cb("⚠️ LLM 未返回零件数据")
-        return ""
+        return {}
 
     _cb(f"组装 {len(parts)} 个零件 → GLB...")
     try:
         glb_bytes = await asyncio.to_thread(build_glb, parts)
     except Exception as e:
         print(f"[AssetGenerator] GLB build failed: {e}")
-        return ""
+        return {}
 
     model_name = re.sub(r"[^\w\-]", "_", result.get("model_name", actor_id))
     os.makedirs(CUSTOM_DIR, exist_ok=True)
@@ -73,4 +84,4 @@ async def generate_single_asset(actor_id: str, prompt: str, model: str = "astron
 
     rel_path = os.path.relpath(dest, GODOT_DIR).replace("\\", "/")
     _cb(f"✅ 建模完成: {filename}")
-    return rel_path
+    return {"path": rel_path, "abs_path": dest, "parts": parts}

@@ -7,7 +7,7 @@ import uuid
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
-from backend.config import SEQUENCE_PATH, FRONTEND_PUBLIC_DIR
+from backend.config import SEQUENCE_PATH, FRONTEND_PUBLIC_DIR, GODOT_DIR
 from backend.models import PromptRequest
 from backend.agents.director import run_director
 from backend.agents.scene_agent import run_scene_agent
@@ -17,7 +17,7 @@ from backend.agents.physics_agent import run_physics_agent
 from backend.agents.asset_agent import run_asset_agent
 from backend.services.renderer import do_godot, do_ffmpeg
 from backend.services.renderer_blender import do_blender
-from backend.services.llm import set_model, get_token_usage
+from backend.services.llm import set_model, get_token_usage, llm_text_call
 from backend.services.project_store import (
     create_project, append_chat_entry, save_sequence, save_video, finalize_project
 )
@@ -56,13 +56,10 @@ async def optimize_prompt(req: OptimizeRequest):
         )
     
     try:
-        # Since it's an async endpoint calling a synchronous llm_call, we run in thread
-        import asyncio
-        optimized = await asyncio.to_thread(llm_call, system, req.prompt)
-        if isinstance(optimized, dict):
-            optimized = optimized.get("text", str(optimized))
-        return {"optimized": str(optimized).strip()}
+        optimized = await asyncio.to_thread(llm_text_call, system, req.prompt)
+        return {"optimized": optimized or req.prompt}
     except Exception as e:
+        print(f"[optimize-prompt] error: {e}")
         return {"error": str(e), "optimized": req.prompt}
 
 
@@ -231,6 +228,7 @@ async def generate_video(req: PromptRequest):
 
             physics_objs   = _parse_field(worker_results["physics"].get("physics_objects", []))
             asset_manifest = _parse_field(worker_results["asset"].get("asset_manifest", {}))
+            meta["godot_dir"] = GODOT_DIR
             sequence = {
                 "meta":            meta,
                 "scene_setup":     _parse_field(worker_results["scene"].get("scene_setup", {})),

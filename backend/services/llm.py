@@ -183,6 +183,40 @@ def _llm_call_anthropic(client, model: str, system: str, user: str, tool: dict, 
             messages.append({"role": "user", "content": f"Fix JSON: {e}"})
     raise last_error
 
+def llm_text_call(system: str, user: str, model_override: str = None) -> str:
+    """Plain-text LLM call — no tool enforcement, no JSON parsing. Returns raw text."""
+    selection = model_override or _model_var.get()
+    client, model = _get_client_config(selection)
+    if not client:
+        raise RuntimeError(f"Unsupported model: {selection}")
+
+    msgs = [
+        {"role": "system", "content": system},
+        {"role": "user",   "content": user},
+    ]
+
+    # Anthropic path
+    if isinstance(client, _anthropic_mod.Anthropic):
+        resp = client.messages.create(
+            model=model,
+            max_tokens=1024,
+            system=system,
+            messages=[{"role": "user", "content": user}],
+        )
+        return resp.content[0].text.strip() if resp.content else ""
+
+    # OpenAI-compatible path (streaming)
+    stream = client.chat.completions.create(model=model, messages=msgs, stream=True)
+    result = ""
+    for chunk in stream:
+        if not chunk.choices:
+            continue
+        delta = chunk.choices[0].delta
+        if delta.content:
+            result += delta.content
+    return result.strip()
+
+
 def llm_call(system: str, user: str, tool: dict, token_cb=None, thinking_cb=None, model_override: str = None) -> dict:
     """Single LLM call that enforces a specific function tool and returns parsed args.
     

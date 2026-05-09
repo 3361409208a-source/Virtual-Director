@@ -30,7 +30,7 @@ director_tool: dict = {
                     "description": "场景中所有需要建模的道具(Props)的ID，如 ['withered_tree','giant_rock','street_lamp']",
                 },
                 "scene_brief":   {"type": "string", "description": "给布景AI的简报"},
-                "actors_brief":  {"type": "string", "description": "给动作AI的简报"},
+                "actors_brief":  {"type": "string", "description": "给动作AI的简报。若场景含人形角色，需注明每个阶段的骨骼动画状态（bone_anim：walk/run/ragdoll）；若场景含载具，需注明车轮旋转要求。"},
                 "camera_brief":  {"type": "string", "description": "给镜头AI的简报"},
                 "physics_brief": {"type": "string", "description": "给物理AI的简报"},
                 "asset_brief":   {"type": "string", "description": "给资产AI的简报：详细描述 actor_ids 和 prop_ids 中每个实体的外观、颜色、材质。"},

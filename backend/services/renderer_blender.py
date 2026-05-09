@@ -97,9 +97,10 @@ def _build_and_render(sequence: dict, mp4_path: str, progress_cb=None) -> None:
             try: v = _json2.loads(v)
             except Exception: pass
         return v if isinstance(v, t) else (t() if t is dict else [])
-    meta     = _pf(sequence.get("meta", {}))
-    fps      = min(int(meta.get("fps", 24)), 12)   # cap at 12fps — CYCLES CPU budget
-    duration = float(meta.get("total_duration", 5.0))
+    meta      = _pf(sequence.get("meta", {}))
+    fps       = min(int(meta.get("fps", 24)), 12)   # cap at 12fps — CYCLES CPU budget
+    duration  = float(meta.get("total_duration", 5.0))
+    godot_dir = str(meta.get("godot_dir", ""))
     total_frames = int(duration * fps)
 
     # ── 0. Reset scene (data API — no context required) ───────────────────
@@ -231,15 +232,29 @@ def _build_and_render(sequence: dict, mp4_path: str, progress_cb=None) -> None:
     # ── 7. Asset manifest & actors ───────────────────────────────────────────
     asset_manifest = _pf(sequence.get("asset_manifest", {}))
     actor_objects  = {}  # actor_id -> root bpy object
+    actor_parts    = {}  # actor_id -> {part_name: bpy object}
+    actor_types    = {}  # actor_id -> type string
 
     for actor in _pf(sequence.get("actors", []), list):
         aid  = str(actor.get("id", ""))
         ipos = actor.get("initial_position", {})
         irot = actor.get("initial_rotation", {})
+        actor_types[aid] = str(actor.get("type", "box"))
 
         manifest = asset_manifest.get(aid)
-        if manifest and isinstance(manifest, dict) and manifest.get("type") == "composite":
-            root, _ = _build_composite(manifest.get("parts", []), aid, scene)
+        if manifest and isinstance(manifest, dict):
+            mtype = manifest.get("type", "")
+            if mtype == "composite":
+                root, part_map = _build_composite(manifest.get("parts", []), aid, scene)
+                actor_parts[aid] = part_map
+            elif mtype == "downloaded":
+                abs_path = manifest.get("abs_path", "")
+                if not abs_path:
+                    rel = manifest.get("path", "")
+                    abs_path = os.path.join(godot_dir, rel) if godot_dir and rel else rel
+                root = _import_glb_actor(abs_path, aid, scene) or _fallback_box(aid, scene)
+            else:
+                root = _fallback_box(aid, scene)
         else:
             root = _fallback_box(aid, scene)
 
@@ -263,6 +278,20 @@ def _build_and_render(sequence: dict, mp4_path: str, progress_cb=None) -> None:
             obj.rotation_euler = Euler(rot)
             obj.keyframe_insert("location",       frame=fr)
             obj.keyframe_insert("rotation_euler", frame=fr)
+
+    # ── 8b. Sub-tracks & procedural bone animations ───────────────────────────
+    for aid, kfs in actor_tracks.items():
+        part_map = actor_parts.get(aid)
+        if not part_map or not kfs:
+            continue
+        atype = actor_types.get(aid, "box")
+
+        _apply_sub_tracks(kfs, part_map, fps, scene)
+
+        if atype == "humanoid":
+            _apply_walk_cycle(kfs, part_map, fps, scene)
+        elif atype in ("car", "plane"):
+            _apply_wheel_rotation(kfs, part_map, fps, scene)
 
     # ── 9. Camera ────────────────────────────────────────────────────────────
     cam_data = bpy.data.cameras.new("Camera")
@@ -544,6 +573,176 @@ def _spawn_primitive(pd: dict, scene, prefix="obj"):
     )
 
 
+# ── Procedural bone / part animations ────────────────────────────────────────
+
+def _find_part(part_map: dict, candidates: list):
+    """Return first matching part object from a priority-ordered candidate list."""
+    for c in candidates:
+        if c in part_map:
+            return part_map[c]
+        for k in part_map:
+            if c in k.lower():
+                return part_map[k]
+    return None
+
+
+def _vec_dist(p0: dict, p1: dict) -> float:
+    import math
+    dx = float(p1.get("x", 0)) - float(p0.get("x", 0))
+    dy = float(p1.get("y", 0)) - float(p0.get("y", 0))
+    dz = float(p1.get("z", 0)) - float(p0.get("z", 0))
+    return math.sqrt(dx * dx + dy * dy + dz * dz)
+
+
+def _apply_walk_cycle(kfs: list, part_map: dict, fps: int, scene) -> None:
+    """Generate procedural walk/run/ragdoll limb animation for a humanoid composite actor."""
+    import math
+    from mathutils import Euler
+
+    leg_l  = _find_part(part_map, ["left_leg", "leg_l", "l_leg", "thigh_l", "lower_leg_l"])
+    leg_r  = _find_part(part_map, ["right_leg", "leg_r", "r_leg", "thigh_r", "lower_leg_r"])
+    arm_l  = _find_part(part_map, ["left_arm", "arm_l", "l_arm", "upper_arm_l", "forearm_l"])
+    arm_r  = _find_part(part_map, ["right_arm", "arm_r", "r_arm", "upper_arm_r", "forearm_r"])
+    spine  = _find_part(part_map, ["spine", "torso", "chest", "body", "trunk"])
+
+    if not any([leg_l, leg_r, arm_l, arm_r]):
+        return
+
+    walk_freq = 1.8   # steps/sec at walking pace
+
+    for i, kf in enumerate(kfs):
+        t0         = float(kf.get("time", 0))
+        bone_anim  = kf.get("bone_anim", "")
+        t1_kf      = kfs[i + 1] if i + 1 < len(kfs) else None
+        t1         = float(t1_kf.get("time", t0 + 1.0)) if t1_kf else t0 + 1.0
+
+        # Infer speed from position delta when bone_anim is not explicit
+        if bone_anim not in ("walk", "run", "ragdoll"):
+            if t1_kf and t1 > t0:
+                dist  = _vec_dist(kf.get("position", {}), t1_kf.get("position", {}))
+                speed = dist / (t1 - t0)
+                if speed >= 3.0:
+                    bone_anim = "run"
+                elif speed >= 0.4:
+                    bone_anim = "walk"
+                else:
+                    continue
+            else:
+                continue
+
+        if bone_anim == "idle":
+            continue
+
+        freq      = walk_freq * (1.7 if bone_anim == "run" else 1.0)
+        amplitude = 38.0 if bone_anim == "run" else 28.0
+        arm_amp   = amplitude * 0.55
+
+        for f in range(int(t0 * fps), int(t1 * fps) + 1):
+            curr_t = f / fps
+            phase  = curr_t * 2 * math.pi * freq
+            fr     = f + 1
+
+            if bone_anim == "ragdoll":
+                rnd = math.sin(curr_t * 7.3) * 45
+                if leg_l:
+                    leg_l.rotation_euler = Euler((math.radians(rnd * 1.1), math.radians(rnd * 0.4), 0))
+                    leg_l.keyframe_insert("rotation_euler", frame=fr)
+                if leg_r:
+                    leg_r.rotation_euler = Euler((math.radians(-rnd * 0.9), math.radians(-rnd * 0.5), 0))
+                    leg_r.keyframe_insert("rotation_euler", frame=fr)
+                if arm_l:
+                    arm_l.rotation_euler = Euler((math.radians(-rnd * 0.8), 0, math.radians(rnd * 0.6)))
+                    arm_l.keyframe_insert("rotation_euler", frame=fr)
+                if arm_r:
+                    arm_r.rotation_euler = Euler((math.radians(rnd * 0.7), 0, math.radians(-rnd * 0.6)))
+                    arm_r.keyframe_insert("rotation_euler", frame=fr)
+            else:
+                scene.frame_set(fr)
+                if leg_l:
+                    leg_l.rotation_euler = Euler((math.radians(math.sin(phase) * amplitude), 0, 0))
+                    leg_l.keyframe_insert("rotation_euler", frame=fr)
+                if leg_r:
+                    leg_r.rotation_euler = Euler((math.radians(-math.sin(phase) * amplitude), 0, 0))
+                    leg_r.keyframe_insert("rotation_euler", frame=fr)
+                if arm_l:
+                    arm_l.rotation_euler = Euler((math.radians(-math.sin(phase) * arm_amp), 0, 0))
+                    arm_l.keyframe_insert("rotation_euler", frame=fr)
+                if arm_r:
+                    arm_r.rotation_euler = Euler((math.radians(math.sin(phase) * arm_amp), 0, 0))
+                    arm_r.keyframe_insert("rotation_euler", frame=fr)
+                if spine:
+                    spine.rotation_euler = Euler((math.radians(5 + math.sin(phase * 0.5) * 3), 0, 0))
+                    spine.keyframe_insert("rotation_euler", frame=fr)
+
+
+def _apply_wheel_rotation(kfs: list, part_map: dict, fps: int, scene) -> None:
+    """Auto-generate wheel spin keyframes for car composite actors.
+    Only runs if the AI did NOT already populate sub_tracks for wheel parts.
+    """
+    import math
+    from mathutils import Euler
+
+    wheel_parts = {}
+    for pname, pobj in part_map.items():
+        ln = pname.lower()
+        if "wheel" in ln or "tire" in ln or "tyre" in ln:
+            wheel_parts[pname] = pobj
+
+    if not wheel_parts:
+        return
+
+    # Skip if AI already provided manual sub_tracks for any wheel
+    for kf in kfs:
+        for wn in kf.get("sub_tracks", {}):
+            if wn in wheel_parts:
+                return
+
+    wheel_radius   = 0.38   # metres (approximate)
+    deg_per_meter  = 360.0 / (2 * math.pi * wheel_radius)
+    cumulative_rot = 0.0
+    prev_z         = None
+
+    for kf in kfs:
+        t     = float(kf.get("time", 0))
+        curr_z = float(kf.get("position", {}).get("z", 0))
+        if prev_z is not None:
+            dz = curr_z - prev_z
+            cumulative_rot += dz * deg_per_meter
+
+        fr = int(round(t * fps)) + 1
+        scene.frame_set(fr)
+        for wobj in wheel_parts.values():
+            wobj.rotation_euler = Euler((math.radians(cumulative_rot), 0, 0))
+            wobj.keyframe_insert("rotation_euler", frame=fr)
+
+        prev_z = curr_z
+
+
+def _apply_sub_tracks(kfs: list, part_map: dict, fps: int, scene) -> None:
+    """Apply AI-specified sub_track per-part animations from keyframes."""
+    from mathutils import Vector, Euler
+
+    for kf in kfs:
+        sub = kf.get("sub_tracks")
+        if not sub or not isinstance(sub, dict):
+            continue
+        t  = float(kf.get("time", 0))
+        fr = int(round(t * fps)) + 1
+        scene.frame_set(fr)
+        for part_name, ptransform in sub.items():
+            pobj = part_map.get(part_name)
+            if not pobj or not isinstance(ptransform, dict):
+                continue
+            ppos = ptransform.get("position")
+            prot = ptransform.get("rotation")
+            if ppos and isinstance(ppos, dict):
+                pobj.location = Vector(_p(ppos))
+                pobj.keyframe_insert("location", frame=fr)
+            if prot and isinstance(prot, dict):
+                pobj.rotation_euler = Euler(_r(prot))
+                pobj.keyframe_insert("rotation_euler", frame=fr)
+
+
 def _build_composite(parts: list, actor_id: str, scene) -> tuple:
     """Build composite actor; returns (root_empty, {part_name: obj})"""
     import bpy
@@ -582,6 +781,50 @@ def _fallback_box(actor_id: str, scene) -> "bpy.types.Object":
     return _add_primitive("box", {"x": 1, "y": 1, "z": 1},
                           {"r": 0.5, "g": 0.5, "b": 0.55},
                           {}, {}, actor_id, scene)
+
+
+def _import_glb_actor(glb_path: str, actor_id: str, scene) -> "bpy.types.Object | None":
+    """Import a GLB file into the Blender scene and return a root Empty parenting all imports."""
+    import bpy
+    if not glb_path or not os.path.exists(glb_path):
+        print(f"[BlenderRenderer] GLB not found: {glb_path}")
+        return None
+    try:
+        existing_names = set(bpy.data.objects.keys())
+
+        # Try context-override import (Blender 3.2+); fall back to bare call
+        try:
+            with bpy.context.temp_override():
+                bpy.ops.import_scene.gltf(filepath=glb_path)
+        except Exception:
+            bpy.ops.import_scene.gltf(filepath=glb_path)
+
+        new_objs = [o for o in bpy.data.objects if o.name not in existing_names]
+        if not new_objs:
+            print(f"[BlenderRenderer] GLTF import produced no objects: {glb_path}")
+            return None
+
+        # Ensure all imported objects belong to our scene collection
+        for obj in new_objs:
+            if obj.name not in scene.collection.objects:
+                scene.collection.objects.link(obj)
+
+        # Build a root Empty to parent everything, for uniform transform handling
+        root = bpy.data.objects.new(actor_id, None)
+        root.empty_display_type = "PLAIN_AXES"
+        root.empty_display_size = 0.1
+        scene.collection.objects.link(root)
+
+        new_set = {o.name for o in new_objs}
+        for obj in new_objs:
+            if obj.parent is None or obj.parent.name not in new_set:
+                obj.parent = root
+
+        print(f"[BlenderRenderer] Imported GLB '{os.path.basename(glb_path)}' → {len(new_objs)} objects")
+        return root
+    except Exception as e:
+        print(f"[BlenderRenderer] GLB import failed for {actor_id}: {e}")
+        return None
 
 
 # ── Public API ────────────────────────────────────────────────────────────────

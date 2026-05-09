@@ -27,12 +27,12 @@ _HUMANOID_BONES = [
     ("chest",             "spine",              0.64,  0.00,  0.00),
     ("neck",              "chest",              0.74,  0.00,  0.00),
     ("head",              "neck",               0.86,  0.00,  0.00),
-    ("left_upper_arm",    "chest",              0.66, -0.20,  0.00),
-    ("left_lower_arm",    "left_upper_arm",     0.55, -0.28,  0.00),
-    ("left_hand",         "left_lower_arm",     0.45, -0.34,  0.00),
-    ("right_upper_arm",   "chest",              0.66,  0.20,  0.00),
-    ("right_lower_arm",   "right_upper_arm",    0.55,  0.28,  0.00),
-    ("right_hand",        "right_lower_arm",    0.45,  0.34,  0.00),
+    ("left_upper_arm",    "chest",              0.65, -0.17,  0.00),
+    ("left_lower_arm",    "left_upper_arm",     0.65, -0.30,  0.00),
+    ("left_hand",         "left_lower_arm",     0.65, -0.43,  0.00),
+    ("right_upper_arm",   "chest",              0.65,  0.17,  0.00),
+    ("right_lower_arm",   "right_upper_arm",    0.65,  0.30,  0.00),
+    ("right_hand",        "right_lower_arm",    0.65,  0.43,  0.00),
     ("left_upper_leg",    "hips",               0.37, -0.11,  0.00),
     ("left_lower_leg",    "left_upper_leg",     0.20, -0.11,  0.00),
     ("left_foot",         "left_lower_leg",     0.03, -0.11,  0.06),
@@ -136,6 +136,28 @@ def _add_accessor(gltf: pygltflib.GLTF2, bv_idx: int,
     return acc_idx
 
 
+def _build_parent_map(gltf: pygltflib.GLTF2) -> dict:
+    """Return {child_node_idx: parent_node_idx} for the entire node list."""
+    parent_map: dict[int, int] = {}
+    for i, node in enumerate(gltf.nodes):
+        for child_idx in (node.children or []):
+            parent_map[child_idx] = i
+    return parent_map
+
+
+def _world_translation(node_idx: int, gltf: pygltflib.GLTF2,
+                       parent_map: dict) -> tuple[float, float, float]:
+    """Accumulate translation up the full ancestor chain (ignores rotation/scale
+    for simplicity — AI-generated models only use translation on container nodes)."""
+    tx, ty, tz = 0.0, 0.0, 0.0
+    cur = node_idx
+    while cur is not None:
+        t = gltf.nodes[cur].translation or [0.0, 0.0, 0.0]
+        tx += t[0]; ty += t[1]; tz += t[2]
+        cur = parent_map.get(cur)
+    return tx, ty, tz
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Main entry point
 # ─────────────────────────────────────────────────────────────────────────────
@@ -148,6 +170,7 @@ def add_skeleton(src_path: str, dst_path: str) -> dict:
     gltf = pygltflib.GLTF2().load(src_path)
     binary = bytearray(gltf.binary_blob() or b"")
 
+    parent_map = _build_parent_map(gltf)
     body_type = _detect_body_type(gltf)
     bone_defs = _HUMANOID_BONES if body_type == "humanoid" else _GENERIC_BONES
 
@@ -227,47 +250,47 @@ def add_skeleton(src_path: str, dst_path: str) -> dict:
 
     # ── 6. Add JOINTS_0 + WEIGHTS_0 to every mesh primitive ──────────────────
     rigged_meshes = 0
-    for node in gltf.nodes[:first_bone_node]:  # only original mesh nodes
+    baked_bv_set: set[int] = set()   # track already-baked bufferViews
+    for node_idx, node in enumerate(gltf.nodes[:first_bone_node]):
         if node.mesh is None:
             continue
 
-        # ── Bake node transform into vertices ────────────────────────────────
-        # When a node has a skin, its T/R/S are ignored by many engines.
-        # We must bake the translation into the actual vertex positions.
-        tx, ty, tz = (node.translation or [0.0, 0.0, 0.0])
-        node.translation = [0.0, 0.0, 0.0]  # Reset node transform
-        
-        # Determine node world center Y for bone classification
-        center_y = ty
+        # ── Bake FULL world-space transform into vertices ─────────────────────
+        # Accumulate translation from this node AND all ancestors.
+        # When skin is applied, a node's own TRS is ignored; we must pre-bake
+        # the complete offset so every mesh lands at its correct world position.
+        wtx, wty, wtz = _world_translation(node_idx, gltf, parent_map)
+
+        # Zero out this node's own translation (parent chain stays untouched
+        # but only non-mesh parent nodes will remain — they have no skin).
+        node.translation = [0.0, 0.0, 0.0]
+
+        center_y = wty
         mesh = gltf.meshes[node.mesh]
-        
+
         for prim in mesh.primitives:
             if prim.attributes is None or prim.attributes.POSITION is None:
                 continue
-            
-            # 1. Get position accessor and data
-            pos_acc = gltf.accessors[prim.attributes.POSITION]
-            pos_bv = gltf.bufferViews[pos_acc.bufferView]
-            
-            # Read and update vertices in the binary blob
-            start = pos_bv.byteOffset + pos_acc.byteOffset
-            count = pos_acc.count
-            
-            # Update center_y calculation before baking
-            if pos_acc.min and pos_acc.max:
-                center_y = (pos_acc.min[1] + pos_acc.max[1]) / 2.0 + ty
 
-            # Bake translation into the binary blob
-            for i in range(count):
-                v_offset = start + i * 12 # 3 * float32
-                vx, vy, vz = struct.unpack_from("3f", binary, v_offset)
-                struct.pack_into("3f", binary, v_offset, vx + tx, vy + ty, vz + tz)
-            
-            # Update accessor min/max after baking
-            if pos_acc.min:
-                pos_acc.min = [pos_acc.min[0] + tx, pos_acc.min[1] + ty, pos_acc.min[2] + tz]
-            if pos_acc.max:
-                pos_acc.max = [pos_acc.max[0] + tx, pos_acc.max[1] + ty, pos_acc.max[2] + tz]
+            pos_acc = gltf.accessors[prim.attributes.POSITION]
+            pos_bv  = gltf.bufferViews[pos_acc.bufferView]
+            start   = pos_bv.byteOffset + pos_acc.byteOffset
+            count   = pos_acc.count
+
+            if pos_acc.min and pos_acc.max:
+                center_y = (pos_acc.min[1] + pos_acc.max[1]) / 2.0 + wty
+
+            bv_key = pos_acc.bufferView
+            if bv_key not in baked_bv_set:
+                baked_bv_set.add(bv_key)
+                for i in range(count):
+                    v_offset = start + i * 12
+                    vx, vy, vz = struct.unpack_from("3f", binary, v_offset)
+                    struct.pack_into("3f", binary, v_offset, vx + wtx, vy + wty, vz + wtz)
+                if pos_acc.min:
+                    pos_acc.min = [pos_acc.min[0] + wtx, pos_acc.min[1] + wty, pos_acc.min[2] + wtz]
+                if pos_acc.max:
+                    pos_acc.max = [pos_acc.max[0] + wtx, pos_acc.max[1] + wty, pos_acc.max[2] + wtz]
 
             # 2. Add skinning data (JOINTS_0, WEIGHTS_0)
             n_verts = count
